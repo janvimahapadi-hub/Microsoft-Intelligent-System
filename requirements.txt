@@ -1,0 +1,12 @@
+streamlit
+feedparser
+requests
+beautifulsoup4
+pandas
+numpy
+sentence-transformers
+faiss-cpu
+transformers
+torch
+plotly
+python-dotenv

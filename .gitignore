@@ -70,6 +70,7 @@ data_backup/
 backup/
 *_backup/
 *.bak
+data_backup/
 
 # =========================
 # Large local model/cache files

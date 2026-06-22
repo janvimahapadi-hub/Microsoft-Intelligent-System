@@ -44,7 +44,7 @@ The system acts as an AI-powered CEO advisor capable of:
 ---
 
 # 🔄 Data Flow Diagram
-![Data Flow](screenshots/data flow.png)
+![Data Flow](screenshots/dataflow.png)
 
 ---
 # 📸 Dashboard Screenshots

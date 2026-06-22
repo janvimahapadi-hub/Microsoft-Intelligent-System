@@ -1,56 +1,75 @@
 import json
 import re
-from bs4 import BeautifulSoup
+from pathlib import Path
 
 
-RAW_PATH = "data/raw_documents.json"
-CLEANED_PATH = "data/cleaned_documents.json"
+RAW_PATH = Path("data/raw_documents.json")
+CLEANED_PATH = Path("data/cleaned_documents.json")
+
+
+BAD_TERMS = [
+    "weekly employment",
+    "employment q&a",
+    "job search",
+    "resume",
+    "interview",
+    "hiring",
+    "study buddy",
+    "open to work"
+]
 
 
 def clean_text(text):
     if not text:
         return ""
 
-    soup = BeautifulSoup(text, "html.parser")
-    text = soup.get_text(" ", strip=True)
-
-    text = re.sub(r"http\S+|www\S+", "", text)
+    text = re.sub(r"<.*?>", " ", text)
     text = re.sub(r"\s+", " ", text)
-
     return text.strip()
 
 
-def clean_documents(raw_documents):
-    cleaned_documents = []
-
-    for i, doc in enumerate(raw_documents):
-        title = clean_text(doc.get("title", ""))
-        content = clean_text(doc.get("content", ""))
-
-        if not title and not content:
-            continue
-
-        cleaned_documents.append({
-            "doc_id": i + 1,
-            "title": title,
-            "source": doc.get("source", ""),
-            "source_type": doc.get("source_type", ""),
-            "url": doc.get("url", ""),
-            "published": doc.get("published", ""),
-            "content": content,
-            "content_length": len(content),
-            "used_full_article": doc.get("used_full_article", False),
-            "collected_at": doc.get("collected_at", "")
-        })
-
-    return cleaned_documents
+def is_bad_document(title, content):
+    combined = f"{title} {content}".lower()
+    return any(term in combined for term in BAD_TERMS)
 
 
-def main():
+def clean_documents():
+    if not RAW_PATH.exists():
+        raise FileNotFoundError(f"Raw file not found: {RAW_PATH}")
+
     with open(RAW_PATH, "r", encoding="utf-8") as file:
         raw_documents = json.load(file)
 
-    cleaned_documents = clean_documents(raw_documents)
+    cleaned_documents = []
+
+    for idx, doc in enumerate(raw_documents):
+        title = clean_text(doc.get("title", ""))
+        content = clean_text(doc.get("content", ""))
+
+        if not title or not content:
+            continue
+
+        if len(content) < 100:
+            continue
+
+        if is_bad_document(title, content):
+            continue
+
+        cleaned_documents.append({
+            "doc_id": len(cleaned_documents),
+            "title": title,
+            "source": doc.get("source", "Unknown source"),
+            "source_type": doc.get("source_type", "unknown"),
+            "company": doc.get("company", doc.get("competitor", "Microsoft")),
+            "competitor": doc.get("competitor", ""),
+            "url": doc.get("url", ""),
+            "published": doc.get("published", ""),
+            "content": content,
+            "summary": clean_text(doc.get("summary", "")),
+            "content_length": len(content)
+        })
+
+    CLEANED_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     with open(CLEANED_PATH, "w", encoding="utf-8") as file:
         json.dump(cleaned_documents, file, indent=4, ensure_ascii=False)
@@ -61,4 +80,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    clean_documents()

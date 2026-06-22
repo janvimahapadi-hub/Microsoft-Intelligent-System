@@ -1,4 +1,4 @@
-from retrieval.retriever import Retriever
+from retrieval.hybrid_retriever import HybridRetriever
 from llm.ollama_client import generate_response
 from llm.prompts import (
     FAST_CEO_SYSTEM_PROMPT,
@@ -10,11 +10,6 @@ from llm.prompts import (
 
 
 def build_strategic_queries(company_name, question):
-    """
-    Multi-query retrieval gives broader evidence than a single query.
-    This improves strategic depth and source diversity.
-    """
-
     return [
         question,
         f"{company_name} AI strategy opportunities Azure Copilot Foundry",
@@ -25,20 +20,11 @@ def build_strategic_queries(company_name, question):
 
 
 def deduplicate_evidence(evidence_items, max_items=5):
-    """
-    Remove duplicate or near-duplicate evidence by URL/title/chunk ID.
-    FAISS often returns multiple chunks from the same article.
-    """
-
     seen = set()
     unique_items = []
 
     for item in evidence_items:
-        key = (
-            item.get("url")
-            or item.get("title")
-            or str(item.get("chunk_id"))
-        )
+        key = item.get("url") or item.get("title") or str(item.get("chunk_id"))
 
         if key in seen:
             continue
@@ -46,7 +32,6 @@ def deduplicate_evidence(evidence_items, max_items=5):
         seen.add(key)
         unique_items.append(item)
 
-    # FAISS L2 distance normally means lower score = closer match.
     unique_items = sorted(
         unique_items,
         key=lambda x: x.get("score", 999999)
@@ -56,32 +41,14 @@ def deduplicate_evidence(evidence_items, max_items=5):
 
 
 def calculate_confidence(evidence_items):
-    """
-    Confidence is based on:
-    - number of retrieved evidence items
-    - source diversity
-    - source type diversity
-    - URL diversity
-
-    This is not model confidence. It is retrieval/evidence confidence.
-    """
-
     if not evidence_items:
         return 0.0
 
     evidence_count = len(evidence_items)
 
-    sources = set(
-        item.get("source", "unknown") for item in evidence_items
-    )
-
-    source_types = set(
-        item.get("source_type", "unknown") for item in evidence_items
-    )
-
-    urls = set(
-        item.get("url", "") for item in evidence_items if item.get("url")
-    )
+    sources = set(item.get("source", "unknown") for item in evidence_items)
+    source_types = set(item.get("source_type", "unknown") for item in evidence_items)
+    urls = set(item.get("url", "") for item in evidence_items if item.get("url"))
 
     confidence = 0.3
 
@@ -107,11 +74,6 @@ def calculate_confidence(evidence_items):
 
 
 def build_fallback_playbook(company_name, strategic_question, evidence_items, error_message):
-    """
-    If Ollama fails or times out, the dashboard still returns a useful,
-    evidence-aware strategic playbook instead of crashing.
-    """
-
     evidence_titles = []
 
     for item in evidence_items:
@@ -215,7 +177,7 @@ def build_fallback_chat_answer(company_name, user_question, evidence_items, erro
 
 The system retrieved evidence for the follow-up question: **{user_question}**.
 
-The local LLM was too slow or unavailable, so this fallback answer is based on the retrieved evidence metadata.
+The local LLM was too slow, unavailable, or returned an incomplete response. This fallback answer is based on retrieved evidence metadata.
 
 ### Practical next step
 
@@ -238,8 +200,9 @@ This fallback response does not include full LLM reasoning. To improve the answe
 Fallback reason: {error_message}
 """
 
+
 def is_incomplete_answer(answer):
-    if not answer:
+    if not answer or len(answer.strip()) < 80:
         return True
 
     required_markers = [
@@ -273,20 +236,48 @@ def is_incomplete_answer(answer):
     return any(last_text.endswith(word) for word in unfinished_endings)
 
 
+def is_bad_evidence(item):
+    title = item.get("title", "").lower()
+    source = item.get("source", "").lower()
+    evidence = item.get("evidence", "").lower()
+
+    bad_terms = [
+        "weekly employment",
+        "employment q&a",
+        "job search",
+        "resume",
+        "interview",
+        "hiring"
+    ]
+
+    if any(term in title or term in evidence for term in bad_terms):
+        return True
+
+    if "reddit" in source and any(term in title for term in bad_terms):
+        return True
+
+    return False
+
+
 class StrategicAnalyzer:
     def __init__(self, company_name="Microsoft"):
         self.company_name = company_name
-        self.retriever = Retriever()
+        self.retriever = HybridRetriever()
 
     def retrieve_strategic_evidence(self, strategic_question, top_k=5):
         all_evidence = []
 
         for query in build_strategic_queries(self.company_name, strategic_question):
-            results = self.retriever.search(query, top_k=2)
+            results = self.retriever.search(query, top_k=4)
             all_evidence.extend(results)
 
+        clean_evidence = [
+            item for item in all_evidence
+            if not is_bad_evidence(item)
+        ]
+
         return deduplicate_evidence(
-            all_evidence,
+            clean_evidence,
             max_items=top_k
         )
 
@@ -305,20 +296,22 @@ class StrategicAnalyzer:
         )
 
         try:
-            if mode == "fast":
-               selected_prompt = FAST_CEO_SYSTEM_PROMPT
-            else:
-               selected_prompt = CEO_SYSTEM_PROMPT
+            selected_prompt = (
+                FAST_CEO_SYSTEM_PROMPT
+                if mode == "fast"
+                else CEO_SYSTEM_PROMPT
+            )
+
             answer = generate_response(
-                system_prompt=CEO_SYSTEM_PROMPT,
+                system_prompt=selected_prompt,
                 user_prompt=user_prompt,
                 mode=mode
             )
 
             if is_incomplete_answer(answer):
-               raise RuntimeError(
-               "LLM response was incomplete. Using fallback playbook."
-            )
+                raise RuntimeError(
+                    "LLM response was incomplete. Using fallback playbook."
+                )
 
             llm_status = "LLM generation successful"
 
@@ -342,9 +335,24 @@ class StrategicAnalyzer:
         }
 
     def answer_followup(self, user_question, previous_briefing="", top_k=3, mode="chat"):
-        evidence_items = self.retriever.search(
-            user_question,
-            top_k=top_k
+        followup_query = (
+            user_question
+            + " Microsoft AI strategy Azure Copilot Foundry partner ecosystem execution roadmap"
+        )
+
+        raw_evidence = self.retriever.search(
+            followup_query,
+            top_k=top_k * 4
+        )
+
+        evidence_items = [
+            item for item in raw_evidence
+            if not is_bad_evidence(item)
+        ]
+
+        evidence_items = deduplicate_evidence(
+            evidence_items,
+            max_items=top_k
         )
 
         user_prompt = build_chat_prompt(
@@ -360,6 +368,11 @@ class StrategicAnalyzer:
                 user_prompt=user_prompt,
                 mode=mode
             )
+
+            if not answer or len(answer.strip()) < 50:
+                raise RuntimeError(
+                    "LLM follow-up response was empty or incomplete."
+                )
 
             llm_status = "LLM follow-up generation successful"
 

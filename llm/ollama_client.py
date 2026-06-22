@@ -6,29 +6,46 @@ import requests
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 
-# Default model. You can override it from PowerShell:
-# $env:OLLAMA_MODEL="phi3:mini"
+# You can override model from PowerShell:
+# $env:OLLAMA_MODEL="llama3.2:3b"
 # streamlit run app.py
 MODEL_NAME = os.getenv("OLLAMA_MODEL", "qwen3:8b")
 
+DEBUG_LLM = os.getenv("DEBUG_LLM", "0") == "1"
+
 
 def clean_response(text):
-    """
-    Cleans model output, especially Qwen-style thinking tags.
-    """
     if not text:
         return ""
 
-    # Remove Qwen thinking blocks if they appear.
-    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
-    text = text.replace("<think>", "").replace("</think>", "")
-    text = text.strip()
+    raw_text = text.strip()
 
-    # If the model adds extra preamble, start from the first numbered markdown section.
+    # Remove Qwen thinking blocks only if there is text outside them.
+    without_think = re.sub(
+        r"<think>.*?</think>",
+        "",
+        raw_text,
+        flags=re.DOTALL
+    ).strip()
+
+    if without_think:
+        text = without_think
+    else:
+        text = raw_text.replace("<think>", "").replace("</think>", "").strip()
+
     if "## 1." in text:
-        text = text[text.find("## 1."):]
+        trimmed = text[text.find("## 1."):]
+        if len(trimmed.strip()) > 30:
+            text = trimmed
 
     return text.strip()
+
+
+def validate_answer(answer):
+    if not answer or len(answer.strip()) < 20:
+        raise RuntimeError("LLM returned an empty or too-short response.")
+
+    return answer.strip()
 
 
 def ask_ollama(
@@ -39,13 +56,6 @@ def ask_ollama(
     num_ctx=4096,
     timeout=900
 ):
-    """
-    Calls Ollama using streaming mode.
-
-    Streaming is more reliable than stream=False because the server keeps sending
-    partial tokens while generating. This reduces timeout problems in Streamlit.
-    """
-
     payload = {
         "model": model_name,
         "prompt": prompt,
@@ -72,9 +82,7 @@ def ask_ollama(
         )
 
     except requests.exceptions.Timeout:
-        raise RuntimeError(
-            "Ollama timed out before responding."
-        )
+        raise RuntimeError("Ollama timed out before responding.")
 
     if response.status_code != 200:
         raise RuntimeError(
@@ -104,7 +112,21 @@ def ask_ollama(
             "Ollama started generating but took too long to finish."
         )
 
-    return clean_response("".join(chunks))
+    raw_output = "".join(chunks)
+    cleaned = clean_response(raw_output)
+
+    if DEBUG_LLM:
+        print("\n" + "=" * 100)
+        print("RAW LLM OUTPUT")
+        print("=" * 100)
+        print(raw_output[:3000])
+        print("\n" + "=" * 100)
+        print("CLEANED LLM OUTPUT")
+        print("=" * 100)
+        print(cleaned[:3000])
+        print("=" * 100)
+
+    return cleaned
 
 
 def generate_response(
@@ -113,15 +135,7 @@ def generate_response(
     model_name=MODEL_NAME,
     mode="playbook"
 ):
-    """
-    mode='fast'      : shorter, faster answer for demo
-    mode='playbook'  : deeper strategic answer
-    mode='chat'      : follow-up Q&A
-    """
-
     full_prompt = f"""
-/no_think
-
 {system_prompt}
 
 USER TASK:
@@ -135,38 +149,42 @@ Rules:
 """
 
     if mode == "fast":
-        return ask_ollama(
+        answer = ask_ollama(
             prompt=full_prompt,
             model_name=model_name,
             temperature=0.2,
-            num_predict=1000,
+            num_predict=700,
             num_ctx=4096,
-            timeout=700
+            timeout=240
         )
+        return validate_answer(answer)
 
     if mode == "chat":
-        return ask_ollama(
+        answer = ask_ollama(
             prompt=full_prompt,
             model_name=model_name,
             temperature=0.2,
-            num_predict=750,
+            num_predict=450,
             num_ctx=3072,
-            timeout=600
+            timeout=180
         )
+        return validate_answer(answer)
 
-    return ask_ollama(
+    answer = ask_ollama(
         prompt=full_prompt,
         model_name=model_name,
         temperature=0.2,
-        num_predict=1600,
+        num_predict=1000,
         num_ctx=4096,
-        timeout=900
+        timeout=300
     )
+    return validate_answer(answer)
 
 
 if __name__ == "__main__":
-    result = ask_ollama(
-        "In one sentence, say that the AI CEO Agent is working.",
-        num_predict=60
+    result = generate_response(
+        system_prompt="You are a helpful assistant.",
+        user_prompt="In one sentence, say that the AI CEO Agent is working.",
+        mode="fast"
     )
     print(result)

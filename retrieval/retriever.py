@@ -1,11 +1,44 @@
 import pickle
-from pathlib import Path
-import utils
 
 import faiss
 from sentence_transformers import SentenceTransformer
 
 from utils.config import FAISS_INDEX_PATH, FAISS_METADATA_PATH
+
+
+BAD_TERMS = [
+    "weekly employment",
+    "employment q&a",
+    "job search",
+    "resume",
+    "interview",
+    "hiring",
+    "study buddy",
+    "open to work"
+]
+
+
+def is_bad_result(item):
+    title = item.get("title", "").lower()
+    source = item.get("source", "").lower()
+    evidence = item.get("evidence", "").lower()
+
+    if any(term in title or term in evidence for term in BAD_TERMS):
+        return True
+
+    if "reddit" in source and any(term in title for term in BAD_TERMS):
+        return True
+
+    return False
+
+
+def source_penalty(item):
+    source = item.get("source", "").lower()
+
+    if "reddit" in source:
+        return 3.0
+
+    return 0.0
 
 
 class Retriever:
@@ -34,22 +67,21 @@ class Retriever:
 
         query_embedding = self.model.encode([query]).astype("float32")
 
-        distances, indices = self.index.search(query_embedding, top_k)
+        # Retrieve more candidates, then filter/rerank.
+        search_k = min(max(top_k * 8, 20), self.index.ntotal)
+
+        distances, indices = self.index.search(query_embedding, search_k)
 
         results = []
 
-        for rank, (distance, index_id) in enumerate(
-            zip(distances[0], indices[0]),
-            start=1
-        ):
+        for distance, index_id in zip(distances[0], indices[0]):
             if index_id == -1:
                 continue
 
             chunk = self.metadata[index_id]
             evidence_text = chunk.get("chunk_text", "")
 
-            results.append({
-                "rank": rank,
+            item = {
                 "score": float(distance),
                 "chunk_id": chunk.get("chunk_id"),
                 "doc_id": chunk.get("doc_id"),
@@ -59,8 +91,23 @@ class Retriever:
                 "url": chunk.get("url", ""),
                 "published": chunk.get("published", ""),
                 "evidence": evidence_text,
-                "evidence_length": len(evidence_text)
-            })
+                "evidence_length": len(evidence_text),
+            }
+
+            if is_bad_result(item):
+                continue
+
+            results.append(item)
+
+        results = sorted(
+            results,
+            key=lambda x: x["score"] + source_penalty(x)
+        )
+
+        results = results[:top_k]
+
+        for rank, item in enumerate(results, start=1):
+            item["rank"] = rank
 
         return results
 
@@ -70,10 +117,10 @@ if __name__ == "__main__":
 
     test_queries = [
         "What are Microsoft's biggest AI opportunities?",
+        "What are Microsoft's biggest cybersecurity risks?",
         "What are Microsoft's biggest risks in cloud and AI?",
         "What are competitors doing against Microsoft?",
         "What emerging technology trends should Microsoft monitor?",
-        "If you were Microsoft's CEO today, what strategic action would you prioritize?"
     ]
 
     for query in test_queries:

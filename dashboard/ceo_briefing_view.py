@@ -1,20 +1,60 @@
 import streamlit as st
 
-from intelligence.strategic_analyzer import StrategicAnalyzer
+from intelligence.ceo_briefing import CEOBriefing
 
 
 @st.cache_resource
-def get_analyzer():
-    """
-    Cache the retriever, embedding model, FAISS index, and metadata.
-    This prevents Streamlit from reloading everything on every interaction.
-    """
-    return StrategicAnalyzer(company_name="Microsoft")
+def get_briefing_engine():
+    return CEOBriefing(company_name="Microsoft")
+
+
+def get_company(item):
+    company = item.get("company", "")
+    competitor = item.get("competitor", "")
+    source = item.get("source", "")
+
+    if company:
+        return company
+
+    if competitor:
+        return competitor
+
+    source_lower = source.lower()
+
+    if "aws" in source_lower:
+        return "AWS"
+    if "google" in source_lower:
+        return "Google Cloud"
+    if "openai" in source_lower:
+        return "OpenAI"
+    if "nvidia" in source_lower:
+        return "NVIDIA"
+
+    return "Microsoft"
+
+
+def show_evidence_diversity(evidence_items):
+    companies = [get_company(item) for item in evidence_items]
+    unique_companies = sorted(set(companies))
+
+    microsoft_count = companies.count("Microsoft")
+    competitor_count = len(companies) - microsoft_count
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric("Evidence Items", len(evidence_items))
+    col2.metric("Companies Used", len(unique_companies))
+    col3.metric("Competitor Evidence", competitor_count)
+
+    st.write("**Companies in Evidence:**", ", ".join(unique_companies))
 
 
 def show_evidence_items(evidence_items, preview_length=700):
     for item in evidence_items:
+        company = get_company(item)
+
         with st.expander(item.get("title", "Untitled evidence")):
+            st.write("**Company:**", company)
             st.write("**Source:**", item.get("source", "Unknown source"))
             st.write("**Source Type:**", item.get("source_type", "unknown"))
             st.write("**Published:**", item.get("published", "unknown"))
@@ -30,68 +70,104 @@ def show_evidence_items(evidence_items, preview_length=700):
 def show_ceo_briefing():
     st.title("CEO Briefing")
     st.caption(
-        "Evidence-based strategic briefing generated using RAG and a local open-source LLM."
+        "Generate evidence-based strategic briefings using RAG, hybrid retrieval, competitor sources, and a local open-source LLM."
     )
 
     default_question = (
-        "Based on the retrieved evidence, what AI strategy should Microsoft prioritize next?"
+        "How should Microsoft compete with AWS and Google Cloud in AI infrastructure?"
     )
 
     question = st.text_area(
-        "Strategic question",
+        "Strategic Question",
         value=default_question,
-        height=100
+        height=120,
+        help="Ask a CEO-level strategic question."
     )
 
-    col1, col2 = st.columns([1, 2])
+    st.markdown("##### Example Strategic Questions")
 
-    with col1:
+    example_questions = [
+        "What AI strategy should Microsoft prioritize over the next 3 years?",
+        "What are Microsoft's biggest cybersecurity risks?",
+        "How should Microsoft compete against OpenAI, Google, and AWS?",
+        "How should Microsoft compete with AWS and Google Cloud in AI infrastructure?",
+        "What cloud opportunities should Microsoft prioritize?",
+        "Which AI investments will generate the highest enterprise value?"
+    ]
+
+    selected_example = st.radio(
+        "Choose an example question",
+        ["Custom Question"] + example_questions,
+        horizontal=False
+    )
+
+    if selected_example != "Custom Question":
+        question = selected_example
+
+    with st.expander("Retrieval Settings", expanded=False):
         generation_mode_label = st.radio(
-            "Generation mode",
+            "Generation Mode",
             ["Fast Briefing", "Deep Strategic Playbook"],
+            horizontal=True,
             index=0
         )
 
-    with col2:
         top_k = st.slider(
-            "Number of evidence chunks to retrieve",
-            min_value=2,
-            max_value=5,
-            value=3
+            "Number of Evidence Chunks",
+            min_value=3,
+            max_value=8,
+            value=5
         )
 
-    if generation_mode_label == "Fast Briefing":
-        generation_mode = "fast"
-    else:
-        generation_mode = "playbook"
+    generation_mode = (
+        "fast"
+        if generation_mode_label == "Fast Briefing"
+        else "playbook"
+    )
 
     if st.button("Generate CEO Briefing"):
         if not question.strip():
             st.warning("Please enter a strategic question.")
             return
 
+        st.session_state["followup_history"] = []
+
         with st.spinner("Retrieving evidence and generating strategic briefing..."):
             try:
-                analyzer = get_analyzer()
+                briefing_engine = get_briefing_engine()
 
-                result = analyzer.analyze(
+                report = briefing_engine.generate(
                     strategic_question=question,
                     top_k=top_k,
                     mode=generation_mode
                 )
 
-                st.session_state["latest_briefing"] = result["answer"]
-                st.session_state["latest_evidence"] = result["evidence"]
-                st.session_state["latest_confidence"] = result["retrieval_confidence"]
-                st.session_state["latest_llm_status"] = result.get("llm_status", "")
+                markdown_report = briefing_engine.generate_markdown_report(report)
+
+                st.session_state["latest_report"] = report
+                st.session_state["latest_briefing"] = report["briefing"]
+                st.session_state["latest_evidence"] = report["evidence"]
+                st.session_state["latest_confidence"] = report["retrieval_confidence"]
+                st.session_state["latest_llm_status"] = report.get("llm_status", "")
+                st.session_state["latest_markdown_report"] = markdown_report
 
             except Exception as error:
                 st.error(f"Could not generate briefing: {error}")
                 return
 
     if "latest_briefing" in st.session_state:
+        st.divider()
+
         st.subheader("Executive Strategic Briefing")
         st.markdown(st.session_state["latest_briefing"])
+
+        if "latest_markdown_report" in st.session_state:
+            st.download_button(
+                label="Download CEO Briefing",
+                data=st.session_state["latest_markdown_report"],
+                file_name="ceo_strategic_briefing.md",
+                mime="text/markdown"
+            )
 
         status = st.session_state.get("latest_llm_status", "")
 
@@ -102,20 +178,23 @@ def show_ceo_briefing():
 
         confidence = st.session_state.get("latest_confidence", 0.0)
 
-        st.metric(
-            "Retrieval Confidence",
-            confidence
-        )
+        st.metric("Retrieval Confidence", f"{confidence:.2f}")
+        st.progress(min(confidence, 1.0))
 
         if confidence < 0.7:
             st.info(
-                "Confidence is moderate because the retrieved evidence may be concentrated in a limited number of sources. "
+                "Confidence is moderate because evidence may be concentrated in limited sources. "
                 "More competitor, market, or community evidence would improve confidence."
             )
         else:
             st.success(
-                "Confidence is high because the recommendation is supported by multiple evidence items."
+                "Confidence is high because the recommendation is supported by diverse evidence items."
             )
+
+        st.subheader("Evidence Diversity")
+        show_evidence_diversity(
+            st.session_state.get("latest_evidence", [])
+        )
 
         st.subheader("Evidence Used")
         show_evidence_items(
@@ -127,12 +206,12 @@ def show_ceo_briefing():
 
     st.subheader("Strategic Follow-up Q&A")
     st.caption(
-        "Ask follow-up questions about the recommendation, execution plan, risks, KPIs, or evidence."
+        "Ask follow-up questions about recommendations, execution plans, risks, KPIs, evidence, or competitors."
     )
 
     followup_question = st.text_input(
         "Ask a strategic follow-up question",
-        placeholder="Example: How should Microsoft execute Action 1 in the next 90 days?"
+        placeholder="Example: How should Microsoft execute this strategy in the next 90 days?"
     )
 
     if "followup_history" not in st.session_state:
@@ -149,9 +228,9 @@ def show_ceo_briefing():
 
         with st.spinner("Thinking through the follow-up question..."):
             try:
-                analyzer = get_analyzer()
+                briefing_engine = get_briefing_engine()
 
-                chat_result = analyzer.answer_followup(
+                chat_result = briefing_engine.analyzer.answer_followup(
                     user_question=followup_question,
                     previous_briefing=st.session_state["latest_briefing"],
                     top_k=3,
@@ -172,6 +251,7 @@ def show_ceo_briefing():
             st.write(chat_item["question"])
 
             status = chat_item.get("llm_status", "")
+
             if "Fallback used" in status:
                 st.warning(status)
             elif status:
@@ -180,7 +260,7 @@ def show_ceo_briefing():
             st.markdown("#### Answer")
             st.markdown(chat_item["answer"])
 
-            st.markdown("#### Evidence used for follow-up")
+            st.markdown("#### Evidence Used for Follow-up")
             show_evidence_items(
                 chat_item.get("evidence", []),
                 preview_length=600

@@ -97,7 +97,7 @@ Source Type: {item.get("source_type", "unknown")}
 Published: {item.get("published", "unknown")}
 URL: {item.get("url", "")}
 Evidence Text:
-{item.get("evidence", "")[:500]}
+{item.get("evidence", "")[:250]}
 """
 
     return f"""
@@ -143,7 +143,7 @@ Source Type: {item.get("source_type", "unknown")}
 Published: {item.get("published", "unknown")}
 URL: {item.get("url", "")}
 Evidence Text:
-{item.get("evidence", "")[:450]}
+{item.get("evidence", "")[:220]}
 """
 
     return f"""

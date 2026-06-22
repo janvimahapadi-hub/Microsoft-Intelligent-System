@@ -315,42 +315,61 @@ Microsoft-Intelligent-System/
 ```
 # 🤖 AI Pipeline
 
+# 🤖 AI Pipeline
+
 The project follows a complete NLP and Retrieval-Augmented Generation (RAG) pipeline:
+
+```text
 Document Collection
 (RSS feeds, blogs, news, competitor sources)
-        ↓
+        │
+        ▼
 Data Cleaning & Deduplication
 (Remove HTML, normalize text, remove duplicates)
-        ↓
+        │
+        ▼
 Chunking & Metadata Enrichment
 (Create overlapping chunks and add source information)
-        ↓
+        │
+        ▼
 Embedding Generation
 (Sentence Transformers)
-        ↓
+        │
+        ▼
 Index Construction
 (FAISS Vector Index + BM25 Keyword Index)
-        ↓
+        │
+        ▼
 Hybrid Retrieval
 (Combine semantic and keyword search results)
-        ↓
+        │
+        ▼
 Evidence Retrieval
 (Select most relevant document chunks)
-        ↓
+        │
+        ▼
 NLP Analysis
-(Sentiment Analysis, Topic Classification, Strategic Signals)
-        ↓
+• Sentiment Analysis
+• Topic Classification
+• Strategic Signal Detection
+        │
+        ▼
 RAG Context Builder
 (Prepare structured context for the LLM)
-        ↓
+        │
+        ▼
 Local LLM (Ollama)
 (Generate strategic insights and reasoning)
-        ↓
+        │
+        ▼
 CEO Briefing Generation
 (Risks, Opportunities, Recommendations)
-        ↓
+        │
+        ▼
 Dashboard Visualization
 (Streamlit Dashboard with executive insights)
+```
+
 
 ---
 

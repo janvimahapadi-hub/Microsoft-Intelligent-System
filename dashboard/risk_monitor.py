@@ -146,29 +146,16 @@ def show_risk_monitor():
 
     st.subheader("Executive Interpretation")
 
-    st.markdown(
-        """
-        <div style="
-            background-color: white;
-            color: #0f172a;
-            padding: 20px;
-            border-radius: 14px;
-            border: 1px solid #e5e7eb;
-            box-shadow: 0 3px 12px rgba(0,0,0,0.05);
-            font-size: 16px;
-            line-height: 1.7;
-        ">
-            <p style="color:#0f172a;">
-                This page highlights strategic risk signals across Microsoft and competitor intelligence.
-            </p>
+    with st.container(border=True):
+        st.write(
+            "This page highlights strategic risk signals across Microsoft and competitor intelligence."
+        )
 
-            <ul>
-                <li style="color:#0f172a;">Microsoft risk signals show areas requiring internal attention, governance, or mitigation.</li>
-                <li style="color:#0f172a;">Competitor risk signals show where rivals may face weaknesses or regulatory pressure.</li>
-                <li style="color:#0f172a;">Security and governance risks are especially important because enterprise AI adoption depends on trust.</li>
-                <li style="color:#0f172a;">Risk clusters can guide executive decisions around compliance, cybersecurity, product safety, and market positioning.</li>
-            </ul>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+        st.markdown(
+            """
+- **Microsoft risk signals** show areas requiring internal attention, governance, or mitigation.
+- **Competitor risk signals** show where rivals may face weaknesses or regulatory pressure.
+- **Security and governance risks** are especially important because enterprise AI adoption depends on trust.
+- **Risk clusters** can guide executive decisions around compliance, cybersecurity, product safety, and market positioning.
+"""
+        )

@@ -210,29 +210,16 @@ def show_competitor_intelligence():
 
     st.subheader("Executive Interpretation")
 
-    st.markdown(
-        """
-        <div style="
-            background-color: white;
-            color: #0f172a;
-            padding: 20px;
-            border-radius: 14px;
-            border: 1px solid #e5e7eb;
-            box-shadow: 0 3px 12px rgba(0,0,0,0.05);
-            font-size: 16px;
-            line-height: 1.7;
-        ">
-            <p style="color:#0f172a;">
-                This page compares Microsoft intelligence with competitor activity.
-            </p>
+    with st.container(border=True):
+        st.write(
+            "This page compares Microsoft intelligence with competitor activity."
+        )
 
-            <ul>
-                <li style="color:#0f172a;">High competitor opportunity signals show where rivals are investing aggressively.</li>
-                <li style="color:#0f172a;">Risk signals show where companies may face governance, security, regulatory, or execution challenges.</li>
-                <li style="color:#0f172a;">The comparison table helps identify which companies dominate the current evidence base.</li>
-                <li style="color:#0f172a;">This supports executive questions such as: where should Microsoft defend, where should it invest, and which competitors require monitoring?</li>
-            </ul>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+        st.markdown(
+            """
+- **High competitor opportunity signals** show where rivals are investing aggressively.
+- **Risk signals** show where companies may face governance, security, regulatory, or execution challenges.
+- **The comparison table** helps identify which companies dominate the current evidence base.
+- **Competitor intelligence** supports executive questions such as where Microsoft should defend, where it should invest, and which competitors require closer monitoring.
+"""
+        )

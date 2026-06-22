@@ -39,29 +39,77 @@ The system acts as an AI-powered CEO advisor capable of:
 
 # 🏗️ System Architecture
 
-Data Collection
-↓
-Cleaning & Deduplication
-↓
-Chunking
-↓
-Embedding Generation
-↓
-FAISS Vector Index
-↓
-BM25 Index
-↓
-Hybrid Retrieval
-↓
-Strategic Analysis
-↓
-LLM Reasoning
-↓
-CEO Briefing Generation
-↓
-Dashboard Visualization
+![Workflow](screenshots/workflow.png)
 
 ---
+#📸 Dashboard Screenshots
+# 📸 Dashboard Screenshots
+
+The AI CEO Strategic Intelligence Agent provides an interactive Streamlit dashboard for executive decision support.
+
+---
+
+## 🧠 CEO Briefing
+
+Generates evidence-based executive recommendations using Hybrid Retrieval (FAISS + BM25), RAG, and a local LLM.
+
+![CEO Briefing](screenshots/ceo_briefing.png)
+---
+
+## 📊 Project Overview
+
+Provides a high-level summary of the strategic intelligence platform, workflow, and business objectives.
+
+![Overview](screenshots/overview.png)
+
+---
+
+## 📈 Sentiment Intelligence
+
+Analyzes sentiment, topics, and strategic signals across collected intelligence documents.
+
+![Sentiment Intelligence](screenshots/sentiment.png)
+
+---
+
+## 🌍 Market Intelligence
+
+Tracks market trends, topic distribution, source coverage, and competitor activity.
+
+![Market Intelligence](screenshots/market.png)
+
+---
+
+## 🏁 Competitor Intelligence
+
+Compares Microsoft against AWS, Google Cloud, OpenAI, NVIDIA, and other competitors.
+
+![Competitor Intelligence](screenshots/competitor.png)
+
+---
+
+## 🚀 Opportunity Monitor
+
+Identifies business growth opportunities and emerging strategic initiatives.
+
+![Opportunity Monitor](screenshots/opportunity.png)
+
+---
+
+## ⚠️ Risk Monitor
+
+Tracks cybersecurity, governance, compliance, and competitive risk signals.
+
+![Risk Monitor](screenshots/risk.png)
+
+---
+
+## ✅ Executive Recommendations
+
+Provides strategic recommendations derived from retrieved evidence and intelligence analysis.
+
+![Recommendations](screenshots/recommendation.png)
+
 
 # 🚀 Key Features
 
@@ -211,6 +259,8 @@ Executive-level strategic recommendations.
 * Competitor Sources
 
 ---
+
+
 
 # 📂 Project Structure
 

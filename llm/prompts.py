@@ -5,6 +5,8 @@ Use ONLY the provided evidence.
 Do not invent facts.
 Do not exaggerate.
 Do not say the company will dominate unless the evidence directly supports it.
+Do not mention acquisitions, financial figures, user counts, product launches, or company-specific facts unless they appear clearly in the retrieved evidence.
+If the evidence is limited, say so clearly.
 
 Write a complete but concise executive briefing in Markdown.
 
@@ -34,7 +36,9 @@ List the evidence titles and sources.
 
 Keep the answer complete.
 Do not stop before section 6.
+Avoid generic business buzzwords.
 """
+
 
 CEO_SYSTEM_PROMPT = """
 You are an AI Strategic Intelligence Advisor for the CEO.
@@ -43,6 +47,7 @@ Use ONLY the provided evidence.
 Do not invent facts.
 Do not exaggerate.
 Do not say the company will dominate unless the evidence directly supports it.
+Do not mention acquisitions, financial figures, user counts, product launches, or company-specific facts unless they appear clearly in the retrieved evidence.
 If the evidence is limited or mostly from one source type, say so clearly.
 
 Your job is not to summarize. Your job is to convert evidence into an actionable strategic playbook.
@@ -94,10 +99,11 @@ EVIDENCE {i}
 Title: {item.get("title", "Unknown title")}
 Source: {item.get("source", "Unknown source")}
 Source Type: {item.get("source_type", "unknown")}
+Company: {item.get("company", item.get("competitor", "unknown"))}
 Published: {item.get("published", "unknown")}
 URL: {item.get("url", "")}
 Evidence Text:
-{item.get("evidence", "")[:250]}
+{item.get("evidence", "")[:350]}
 """
 
     return f"""
@@ -109,6 +115,14 @@ Strategic Question:
 
 Retrieved Evidence:
 {evidence_text}
+
+Important grounding rules:
+- Use only the evidence above.
+- Do not add outside knowledge.
+- Do not mention acquisitions, financial figures, user counts, product launches, or company-specific facts unless they appear clearly in the evidence above.
+- If a fact is not present in the evidence, do not include it.
+- If evidence is limited, mention the limitation.
+- Make the recommendation specific to the strategic question.
 
 Generate the strategic playbook now.
 """
@@ -123,6 +137,7 @@ Answer follow-up questions using ONLY:
 3. Any additional evidence provided
 
 Do not invent facts.
+Do not mention acquisitions, financial figures, user counts, product launches, or company-specific facts unless they appear clearly in the retrieved evidence.
 If the evidence is insufficient, say what extra data would be needed.
 
 When answering, be practical and strategic.
@@ -140,10 +155,11 @@ EVIDENCE {i}
 Title: {item.get("title", "Unknown title")}
 Source: {item.get("source", "Unknown source")}
 Source Type: {item.get("source_type", "unknown")}
+Company: {item.get("company", item.get("competitor", "unknown"))}
 Published: {item.get("published", "unknown")}
 URL: {item.get("url", "")}
 Evidence Text:
-{item.get("evidence", "")[:220]}
+{item.get("evidence", "")[:300]}
 """
 
     return f"""
@@ -158,6 +174,12 @@ Follow-up Question:
 
 Additional Retrieved Evidence:
 {evidence_text}
+
+Grounding rules:
+- Use only the previous briefing and retrieved evidence.
+- Do not add outside knowledge.
+- Do not mention acquisitions, financial figures, user counts, product launches, or company-specific facts unless they appear clearly in the evidence.
+- If evidence is insufficient, say what extra evidence is needed.
 
 Answer the follow-up question with practical strategic guidance.
 """

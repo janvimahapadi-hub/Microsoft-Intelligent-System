@@ -59,7 +59,6 @@ def show_sentiment():
         df["signal_strength"] = "Unknown"
 
     df["company_view"] = df.apply(get_company, axis=1)
-
     clean_df = df[df["strategic_signal"] != "Irrelevant"].copy()
 
     total_docs = len(clean_df)
@@ -68,7 +67,6 @@ def show_sentiment():
     companies = clean_df["company_view"].nunique()
 
     col1, col2, col3, col4 = st.columns(4)
-
     col1.metric("Relevant Documents", total_docs)
     col2.metric("Positive", positive)
     col3.metric("Negative", negative)
@@ -88,33 +86,27 @@ def show_sentiment():
     st.divider()
 
     st.subheader("Sentiment by Company")
-
     sentiment_company = (
         clean_df.groupby(["company_view", "sentiment"])
         .size()
         .reset_index(name="count")
     )
-
     st.dataframe(sentiment_company, use_container_width=True)
 
     st.subheader("Strategic Signal by Company")
-
     signal_company = (
         clean_df.groupby(["company_view", "strategic_signal"])
         .size()
         .reset_index(name="count")
     )
-
     st.dataframe(signal_company, use_container_width=True)
 
     st.subheader("Topic by Company")
-
     topic_company = (
         clean_df.groupby(["company_view", "topic"])
         .size()
         .reset_index(name="count")
     )
-
     st.dataframe(topic_company, use_container_width=True)
 
     st.divider()
@@ -178,29 +170,17 @@ def show_sentiment():
 
     st.subheader("Executive Interpretation")
 
-    st.markdown(
-        """
-        <div style="
-            background-color: white;
-            color: #0f172a;
-            padding: 20px;
-            border-radius: 14px;
-            border: 1px solid #e5e7eb;
-            box-shadow: 0 3px 12px rgba(0,0,0,0.05);
-            font-size: 16px;
-            line-height: 1.7;
-        ">
-            <p style="color:#0f172a;">
-                This page explains how sentiment and strategic signals are distributed across companies and topics.
-            </p>
+    with st.container(border=True):
+        st.write(
+            "This page explains how sentiment and strategic signals are distributed "
+            "across companies and topics."
+        )
 
-            <ul>
-                <li style="color:#0f172a;">Positive sentiment can indicate opportunity, adoption, or product momentum.</li>
-                <li style="color:#0f172a;">Negative sentiment can indicate risk, criticism, uncertainty, or security concern.</li>
-                <li style="color:#0f172a;">Company-level sentiment helps compare Microsoft with AWS, Google Cloud, OpenAI, and NVIDIA.</li>
-                <li style="color:#0f172a;">Strategic signals convert raw sentiment into business categories such as opportunity, risk, or neutral.</li>
-            </ul>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+        st.markdown(
+            """
+- **Positive sentiment** can indicate opportunity, adoption, or product momentum.
+- **Negative sentiment** can indicate risk, criticism, uncertainty, or security concern.
+- **Company-level sentiment** helps compare Microsoft with AWS, Google Cloud, OpenAI, and NVIDIA.
+- **Strategic signals** convert raw sentiment into business categories such as opportunity, risk, or neutral.
+"""
+        )

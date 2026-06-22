@@ -190,30 +190,17 @@ def show_market_intelligence():
 
     st.subheader("Market Interpretation")
 
-    st.markdown(
-        """
-        <div style="
-            background-color: white;
-            color: #0f172a;
-            padding: 20px;
-            border-radius: 14px;
-            border: 1px solid #e5e7eb;
-            box-shadow: 0 3px 12px rgba(0,0,0,0.05);
-            font-size: 16px;
-            line-height: 1.7;
-        ">
-            <p style="color:#0f172a;">
-                This page compares market signals across Microsoft and competitor sources.
-            </p>
+    with st.container(border=True):
+        st.write(
+            "This page compares market signals across Microsoft and competitor sources."
+        )
 
-            <ul>
-                <li style="color:#0f172a;"><b>Company coverage</b> shows whether the intelligence base is balanced across Microsoft, AWS, Google Cloud, OpenAI, NVIDIA, and others.</li>
-                <li style="color:#0f172a;"><b>Trend intelligence</b> shows whether document volume, sentiment, risks, or opportunities are changing over time.</li>
-                <li style="color:#0f172a;">High opportunity signals suggest areas where companies are investing aggressively.</li>
-                <li style="color:#0f172a;">High risk signals suggest areas requiring governance, security, compliance, or competitive monitoring.</li>
-                <li style="color:#0f172a;">Topic concentration shows where the collected intelligence is strongest.</li>
-            </ul>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+        st.markdown(
+            """
+- **Company coverage** shows whether the intelligence base is balanced across Microsoft, AWS, Google Cloud, OpenAI, NVIDIA, and others.
+- **Trend intelligence** shows whether document volume, sentiment, risks, or opportunities are changing over time.
+- **High opportunity signals** suggest areas where companies are investing aggressively.
+- **High risk signals** suggest areas requiring governance, security, compliance, or competitive monitoring.
+- **Topic concentration** shows where the collected intelligence is strongest.
+"""
+        )

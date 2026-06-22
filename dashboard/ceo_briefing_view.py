@@ -33,6 +33,23 @@ def get_company(item):
     return "Microsoft"
 
 
+def clean_preview_text(text, preview_length=700):
+    if not text:
+        return "No preview available."
+
+    text = " ".join(text.split())
+
+    if len(text) <= preview_length:
+        return text
+
+    trimmed = text[:preview_length]
+
+    if " " in trimmed:
+        trimmed = trimmed.rsplit(" ", 1)[0]
+
+    return trimmed + "..."
+
+
 def show_evidence_diversity(evidence_items):
     companies = [get_company(item) for item in evidence_items]
     unique_companies = sorted(set(companies))
@@ -46,7 +63,10 @@ def show_evidence_diversity(evidence_items):
     col2.metric("Companies Used", len(unique_companies))
     col3.metric("Competitor Evidence", competitor_count)
 
-    st.write("**Companies in Evidence:**", ", ".join(unique_companies))
+    if unique_companies:
+        st.write("**Companies in Evidence:**", ", ".join(unique_companies))
+    else:
+        st.write("**Companies in Evidence:** No evidence found")
 
 
 def show_evidence_items(evidence_items, preview_length=700):
@@ -64,7 +84,25 @@ def show_evidence_items(evidence_items, preview_length=700):
                 st.markdown(f"**URL:** [{url}]({url})")
 
             st.write("**Evidence Preview:**")
-            st.write(item.get("evidence", "")[:preview_length])
+            preview = clean_preview_text(
+                item.get("evidence", ""),
+                preview_length=preview_length
+            )
+            st.write(preview)
+
+
+def clear_previous_briefing():
+    keys_to_clear = [
+        "latest_report",
+        "latest_briefing",
+        "latest_evidence",
+        "latest_confidence",
+        "latest_llm_status",
+        "latest_markdown_report",
+    ]
+
+    for key in keys_to_clear:
+        st.session_state.pop(key, None)
 
 
 def show_ceo_briefing():
@@ -73,9 +111,7 @@ def show_ceo_briefing():
         "Generate evidence-based strategic briefings using RAG, hybrid retrieval, competitor sources, and a local open-source LLM."
     )
 
-    default_question = (
-        "How should Microsoft compete with AWS and Google Cloud in AI infrastructure?"
-    )
+    default_question = "What cloud opportunities should Microsoft prioritize?"
 
     question = st.text_area(
         "Strategic Question",
@@ -98,32 +134,23 @@ def show_ceo_briefing():
     selected_example = st.radio(
         "Choose an example question",
         ["Custom Question"] + example_questions,
-        horizontal=False
+        horizontal=False,
+        index=0
     )
 
     if selected_example != "Custom Question":
         question = selected_example
 
     with st.expander("Retrieval Settings", expanded=False):
-        generation_mode_label = st.radio(
-            "Generation Mode",
-            ["Fast Briefing", "Deep Strategic Playbook"],
-            horizontal=True,
-            index=0
-        )
-
         top_k = st.slider(
             "Number of Evidence Chunks",
             min_value=3,
-            max_value=8,
-            value=5
+            max_value=6,
+            value=4,
+            help="Use 3-4 chunks for faster generation. Use more only if Ollama is running smoothly."
         )
 
-    generation_mode = (
-        "fast"
-        if generation_mode_label == "Fast Briefing"
-        else "playbook"
-    )
+    generation_mode = "fast"
 
     if st.button("Generate CEO Briefing"):
         if not question.strip():
@@ -131,6 +158,7 @@ def show_ceo_briefing():
             return
 
         st.session_state["followup_history"] = []
+        clear_previous_briefing()
 
         with st.spinner("Retrieving evidence and generating strategic briefing..."):
             try:
@@ -199,7 +227,7 @@ def show_ceo_briefing():
         st.subheader("Evidence Used")
         show_evidence_items(
             st.session_state.get("latest_evidence", []),
-            preview_length=700
+            preview_length=300
         )
 
     st.divider()

@@ -9,14 +9,100 @@ from llm.prompts import (
 )
 
 
+COMPETITOR_NAMES = [
+    "aws",
+    "amazon",
+    "google",
+    "google cloud",
+    "openai",
+    "nvidia",
+    "anthropic"
+]
+
+
+def get_company_name(item):
+    company = (
+        item.get("company")
+        or item.get("competitor")
+        or item.get("source")
+        or "Unknown"
+    )
+
+    source = item.get("source", "").lower()
+
+    if company and company != "Unknown":
+        return company
+
+    if "aws" in source:
+        return "AWS"
+    if "google" in source:
+        return "Google Cloud"
+    if "openai" in source:
+        return "OpenAI"
+    if "nvidia" in source:
+        return "NVIDIA"
+    if "anthropic" in source:
+        return "Anthropic"
+
+    return "Microsoft"
+
+
+def question_mentions_competitor(question):
+    question_lower = question.lower()
+    return any(name in question_lower for name in COMPETITOR_NAMES)
+
+
 def build_strategic_queries(company_name, question):
-    return [
+    question_lower = question.lower()
+
+    queries = [
         question,
         f"{company_name} AI strategy opportunities Azure Copilot Foundry",
         f"{company_name} AI risks security governance regulation competition",
         f"{company_name} partner ecosystem AI transformation enterprise customers",
         f"{company_name} developer platform GitHub AI productivity opportunity",
     ]
+
+    if "cloud" in question_lower or "azure" in question_lower:
+        queries.extend([
+            f"{company_name} cloud opportunities Azure AI infrastructure enterprise cloud",
+            f"{company_name} Azure AI infrastructure cloud security governance enterprise",
+            "AWS cloud AI infrastructure enterprise generative AI security",
+            "Google Cloud AI infrastructure enterprise Gemini cloud security",
+        ])
+
+    if "aws" in question_lower:
+        queries.extend([
+            "AWS cloud AI infrastructure enterprise generative AI security",
+            "AWS machine learning cloud infrastructure Bedrock enterprise AI",
+        ])
+
+    if "google" in question_lower or "google cloud" in question_lower:
+        queries.extend([
+            "Google Cloud AI infrastructure enterprise Gemini cloud security",
+            "Google Cloud enterprise AI agents Gemini infrastructure",
+        ])
+
+    if "openai" in question_lower:
+        queries.extend([
+            "OpenAI enterprise AI partner network Microsoft competition",
+            "OpenAI model deployment enterprise AI risk partnership",
+        ])
+
+    if "nvidia" in question_lower:
+        queries.extend([
+            "NVIDIA AI infrastructure GPU enterprise cloud competition",
+            "NVIDIA AI platform enterprise infrastructure opportunity",
+        ])
+
+    if "security" in question_lower or "cyber" in question_lower:
+        queries.extend([
+            f"{company_name} cybersecurity AI security Defender governance",
+            "AWS security AI cloud security threat investigation",
+            "Google Cloud security digital sovereignty cloud governance",
+        ])
+
+    return queries
 
 
 def deduplicate_evidence(evidence_items, max_items=5):
@@ -41,36 +127,60 @@ def deduplicate_evidence(evidence_items, max_items=5):
 
 
 def calculate_confidence(evidence_items):
+    """
+    Realistic retrieval confidence.
+
+    Confidence should not become 1.00 just because five chunks were retrieved.
+    It should consider evidence count, unique URLs, source diversity,
+    and company diversity.
+    """
+
     if not evidence_items:
         return 0.0
 
+    sources = set()
+    source_types = set()
+    urls = set()
+    companies = set()
+
+    for item in evidence_items:
+        if item.get("source"):
+            sources.add(item.get("source"))
+
+        if item.get("source_type"):
+            source_types.add(item.get("source_type"))
+
+        if item.get("url"):
+            urls.add(item.get("url"))
+
+        companies.add(get_company_name(item))
+
     evidence_count = len(evidence_items)
+    source_count = len(sources)
+    source_type_count = len(source_types)
+    url_count = len(urls)
+    company_count = len(companies)
 
-    sources = set(item.get("source", "unknown") for item in evidence_items)
-    source_types = set(item.get("source_type", "unknown") for item in evidence_items)
-    urls = set(item.get("url", "") for item in evidence_items if item.get("url"))
+    confidence = 0.0
 
-    confidence = 0.3
+    confidence += min(evidence_count / 5, 1.0) * 0.25
+    confidence += min(source_count / 4, 1.0) * 0.25
+    confidence += min(url_count / 5, 1.0) * 0.20
+    confidence += min(company_count / 3, 1.0) * 0.20
+    confidence += min(source_type_count / 2, 1.0) * 0.10
 
-    if evidence_count >= 3:
-        confidence += 0.2
+    if source_count < 3:
+        confidence -= 0.10
 
-    if evidence_count >= 5:
-        confidence += 0.1
+    if company_count < 2:
+        confidence -= 0.15
 
-    if len(sources) >= 2:
-        confidence += 0.15
+    if url_count < evidence_count:
+        confidence -= 0.05
 
-    if len(sources) >= 3:
-        confidence += 0.1
+    confidence = max(min(confidence, 0.95), 0.0)
 
-    if len(source_types) >= 2:
-        confidence += 0.1
-
-    if len(urls) >= 3:
-        confidence += 0.05
-
-    return min(round(confidence, 2), 1.0)
+    return round(confidence, 2)
 
 
 def build_fallback_playbook(company_name, strategic_question, evidence_items, error_message):
@@ -79,80 +189,70 @@ def build_fallback_playbook(company_name, strategic_question, evidence_items, er
     for item in evidence_items:
         title = item.get("title", "Unknown title")
         source = item.get("source", "Unknown source")
-        evidence_titles.append(f"- {title} ({source})")
+        company = get_company_name(item)
+        evidence_titles.append(f"- {title} ({source}, {company})")
 
     evidence_text = "\n".join(evidence_titles)
 
     return f"""
 ## 1. Executive diagnosis
 
-The system retrieved relevant evidence for the question: **{strategic_question}**.
+The system retrieved evidence for the question: **{strategic_question}**.
 
-The local LLM was too slow or unavailable during generation, so this fallback playbook was created using the retrieved evidence metadata. The recommendation should be treated as a structured decision-support output rather than a final strategic decision.
+The local LLM was too slow, unavailable, or returned an incomplete response, so this fallback playbook was created using retrieved evidence metadata. Treat this as structured decision support, not a final strategic decision.
 
 ## 2. Strategic meaning
 
-The retrieved evidence indicates that {company_name} should evaluate this topic through three lenses: business impact, execution feasibility, and strategic risk. The key management challenge is to move from broad AI interest into measurable initiatives with clear ownership, KPIs, and risk controls.
+The retrieved evidence indicates that {company_name} should evaluate this topic through business impact, execution feasibility, competitive positioning, and strategic risk. The key management challenge is to convert broad AI and cloud momentum into measurable initiatives with clear owners, KPIs, and risk controls.
 
-## 3. Recommended CEO actions
+## 3. Priority opportunities
 
-### Action 1: Validate the strongest opportunity with evidence-backed use cases
-- Priority: High
-- What to do: Identify the most commercially relevant use cases from the retrieved evidence.
-- How to execute:
-  1. Group evidence into opportunity, risk, customer impact, and technology themes.
-  2. Select the top 2 themes with the clearest business value.
-  3. Assign owners to test each theme through a 30-90 day initiative.
-- Who should own it: Product Strategy, Azure, Security, Sales, and Partner teams.
-- Success metrics: Adoption rate, customer pipeline impact, deployment speed.
-- Expected impact: Better prioritization and reduced strategic guesswork.
-- Main risk: Acting on evidence that is too narrow or biased.
-- Evidence: See evidence list below.
+1. **Scale enterprise AI infrastructure**
+   - Focus on Azure AI, Microsoft Foundry, enterprise agents, and secure AI deployment.
+   - KPI: production AI workloads, adoption rate, deployment speed.
 
-### Action 2: Convert the recommendation into an execution roadmap
-- Priority: High
-- What to do: Turn the strategic recommendation into a phased action plan.
-- How to execute:
-  1. Define 30-day validation tasks.
-  2. Define 60-day pilot implementation.
-  3. Define 90-day measurement and scaling criteria.
-- Who should own it: Business unit leadership with support from data, product, and compliance teams.
-- Success metrics: Pilot completion, measurable customer value, risk reduction.
-- Expected impact: Moves the recommendation from idea to execution.
-- Main risk: Weak coordination between technical and business teams.
-- Evidence: See evidence list below.
+2. **Strengthen ecosystem and partner-led adoption**
+   - Use partners, developers, and enterprise channels to accelerate market reach.
+   - KPI: partner-led pipeline, enterprise deployments, customer retention.
 
-### Action 3: Improve confidence through wider evidence collection
-- Priority: Medium
-- What to do: Add competitor, market, and community sources before making a major strategic commitment.
-- How to execute:
-  1. Add competitor source tracking.
-  2. Add market/news signals.
-  3. Add customer/community sentiment signals.
-- Who should own it: Market Intelligence, Strategy, and Data teams.
-- Success metrics: Source diversity, confidence score, evidence freshness.
-- Expected impact: Stronger and more balanced recommendations.
-- Main risk: Slower decision-making if evidence collection becomes too broad.
-- Evidence: See evidence list below.
+3. **Improve governance and security differentiation**
+   - Make trust, security, compliance, and governance core differentiators.
+   - KPI: secure deployment rate, governance coverage, incident reduction.
 
-## 4. Key risks and mitigations
+## 4. 90-day execution plan
 
-- Risk: Evidence may be concentrated in limited sources.  
-  Mitigation: Add competitor, market, and public sentiment sources.
+### First 30 days
+- Identify the top two evidence-backed opportunity themes.
+- Assign owners from Azure, AI Platform, Security, Product Strategy, and Partner teams.
+- Define measurable success criteria.
 
-- Risk: Recommendation may be too generic.  
-  Mitigation: Require every recommendation to include owner, KPI, timeline, and risk.
+### Days 31-60
+- Launch focused pilots for the highest-value cloud or AI opportunity.
+- Validate technical feasibility, customer demand, cost impact, and security requirements.
+- Compare Microsoft positioning against competitor evidence where available.
 
-- Risk: Local LLM may be slow during live demos.  
-  Mitigation: Use cached retrieval, streaming generation, smaller models, and fallback output.
+### Days 61-90
+- Scale the strongest pilot.
+- Publish KPI results.
+- Decide whether to expand, refine, or stop the initiative.
 
-## 5. Follow-up questions the CEO should ask
+## 5. Owners and KPIs
 
-1. Which business unit should own the first 90-day execution plan?
-2. What KPI would prove this recommendation is working?
-3. What competitor or market evidence is missing?
+- **Owners:** Azure leadership, AI Platform, Microsoft Foundry, Security, Product Strategy, Sales, Partner Ecosystem.
+- **KPIs:** Azure AI workload growth, Foundry adoption, customer pipeline impact, deployment speed, governance coverage, risk reduction.
 
-## 6. Evidence used
+## 6. Main risks and mitigations
+
+- **Risk:** Evidence may be concentrated in limited sources.  
+  **Mitigation:** Add more competitor, market, and customer evidence.
+
+- **Risk:** Recommendations may be too broad.  
+  **Mitigation:** Require every recommendation to include owner, KPI, timeline, and evidence.
+
+- **Risk:** Local LLM may be slow during demo.  
+  **Mitigation:** Use fast mode, cached retrieval, smaller model, and fallback output.
+
+## 7. Evidence used
 
 {evidence_text}
 
@@ -168,7 +268,8 @@ def build_fallback_chat_answer(company_name, user_question, evidence_items, erro
     for item in evidence_items:
         title = item.get("title", "Unknown title")
         source = item.get("source", "Unknown source")
-        evidence_titles.append(f"- {title} ({source})")
+        company = get_company_name(item)
+        evidence_titles.append(f"- {title} ({source}, {company})")
 
     evidence_text = "\n".join(evidence_titles)
 
@@ -181,12 +282,12 @@ The local LLM was too slow, unavailable, or returned an incomplete response. Thi
 
 ### Practical next step
 
-Use the retrieved evidence to create a short execution plan with:
+Use the retrieved evidence to create a focused execution plan with:
 
-1. A clear owner
+1. A clear business owner
 2. A 30-60-90 day timeline
 3. 2-3 measurable KPIs
-4. Known risks and mitigations
+4. Main risks and mitigations
 5. Additional evidence needed before final decision
 
 ### Evidence retrieved
@@ -202,38 +303,26 @@ Fallback reason: {error_message}
 
 
 def is_incomplete_answer(answer):
-    if not answer or len(answer.strip()) < 80:
+    if not answer or len(answer.strip()) < 120:
         return True
 
-    required_markers = [
-        "## 1.",
-        "## 2.",
-        "## 3.",
-        "## 4.",
-        "## 5.",
-        "## 6."
+    required_keywords = [
+        "Executive diagnosis",
+        "Recommended CEO decision",
+        "90-day",
+        "KPI",
+        "risk",
+        "Evidence"
     ]
 
-    missing_sections = [
-        marker for marker in required_markers if marker not in answer
-    ]
+    answer_lower = answer.lower()
+    found = 0
 
-    if missing_sections:
-        return True
+    for keyword in required_keywords:
+        if keyword.lower() in answer_lower:
+            found += 1
 
-    unfinished_endings = [
-        "but",
-        "and",
-        "or",
-        "because",
-        "while",
-        "however,"
-    ]
-
-    last_words = answer.strip().lower().split()[-3:]
-    last_text = " ".join(last_words)
-
-    return any(last_text.endswith(word) for word in unfinished_endings)
+    return found < 3
 
 
 def is_bad_evidence(item):
@@ -247,7 +336,9 @@ def is_bad_evidence(item):
         "job search",
         "resume",
         "interview",
-        "hiring"
+        "hiring",
+        "study buddy",
+        "open to work"
     ]
 
     if any(term in title or term in evidence for term in bad_terms):
@@ -267,7 +358,12 @@ class StrategicAnalyzer:
     def retrieve_strategic_evidence(self, strategic_question, top_k=5):
         all_evidence = []
 
-        for query in build_strategic_queries(self.company_name, strategic_question):
+        queries = build_strategic_queries(
+            self.company_name,
+            strategic_question
+        )
+
+        for query in queries:
             results = self.retriever.search(query, top_k=4)
             all_evidence.extend(results)
 
@@ -276,10 +372,12 @@ class StrategicAnalyzer:
             if not is_bad_evidence(item)
         ]
 
-        return deduplicate_evidence(
+        selected_evidence = deduplicate_evidence(
             clean_evidence,
             max_items=top_k
         )
+
+        return selected_evidence
 
     def analyze(self, strategic_question, top_k=5, mode="playbook"):
         evidence_items = self.retrieve_strategic_evidence(
@@ -397,13 +495,11 @@ class StrategicAnalyzer:
 if __name__ == "__main__":
     analyzer = StrategicAnalyzer(company_name="Microsoft")
 
-    question = (
-        "Based on the retrieved evidence, what AI strategy should Microsoft prioritize next?"
-    )
+    question = "What cloud opportunities should Microsoft prioritize?"
 
     result = analyzer.analyze(
         strategic_question=question,
-        top_k=4,
+        top_k=5,
         mode="fast"
     )
 
@@ -424,6 +520,7 @@ if __name__ == "__main__":
         print("\n" + "-" * 100)
         print("Title:", item.get("title"))
         print("Source:", item.get("source"))
+        print("Company:", get_company_name(item))
         print("Source Type:", item.get("source_type"))
         print("Published:", item.get("published"))
         print("URL:", item.get("url"))

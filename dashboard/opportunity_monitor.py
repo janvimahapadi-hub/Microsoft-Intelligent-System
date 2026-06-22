@@ -145,29 +145,17 @@ def show_opportunity_monitor():
 
     st.subheader("Executive Interpretation")
 
-    st.markdown(
-        """
-        <div style="
-            background-color: white;
-            color: #0f172a;
-            padding: 20px;
-            border-radius: 14px;
-            border: 1px solid #e5e7eb;
-            box-shadow: 0 3px 12px rgba(0,0,0,0.05);
-            font-size: 16px;
-            line-height: 1.7;
-        ">
-            <p style="color:#0f172a;">
-                This page highlights where business opportunity signals are appearing across Microsoft and competitors.
-            </p>
+    with st.container(border=True):
+        st.write(
+            "This page highlights where business opportunity signals are appearing "
+            "across Microsoft and competitors."
+        )
 
-            <ul>
-                <li style="color:#0f172a;">Microsoft opportunity signals show areas where it can scale existing strengths.</li>
-                <li style="color:#0f172a;">Competitor opportunity signals show where rivals may be gaining momentum.</li>
-                <li style="color:#0f172a;">Topic-level opportunity analysis helps identify which markets deserve executive attention.</li>
-                <li style="color:#0f172a;">Strong opportunity clusters can guide product investment, partner strategy, and go-to-market planning.</li>
-            </ul>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+        st.markdown(
+            """
+- **Microsoft opportunity signals** show areas where it can scale existing strengths.
+- **Competitor opportunity signals** show where rivals may be gaining momentum.
+- **Topic-level opportunity analysis** helps identify which markets deserve executive attention.
+- **Strong opportunity clusters** can guide product investment, partner strategy, and go-to-market planning.
+"""
+        )

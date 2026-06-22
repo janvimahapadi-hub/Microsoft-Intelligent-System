@@ -1,0 +1,57 @@
+@"
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+.venv/
+ENV/
+
+# Backups
+data_backup/
+backup/
+*_backup/
+*.bak
+
+# Secrets
+.env
+.env.*
+*.key
+*.pem
+secrets.json
+credentials.json
+.streamlit/secrets.toml
+
+# Logs and temp
+*.log
+logs/
+tmp/
+temp/
+.cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Large local model files
+models/
+model_cache/
+*.bin
+*.safetensors
+*.gguf
+*.pt
+*.pth
+*.onnx
+"@ | Set-Content .gitignore

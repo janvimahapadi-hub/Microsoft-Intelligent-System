@@ -313,7 +313,6 @@ Microsoft-Intelligent-System/
 ├── requirements.txt
 └── README.md
 ```
-# 🤖 AI Pipeline
 
 # 🤖 AI Pipeline
 

@@ -146,7 +146,38 @@ Benefits:
 * Better precision
 * Improved retrieval diversity
 * Stronger evidence quality
+## Retrieval Evaluation
 
+The system uses a Hybrid Retrieval approach combining FAISS Semantic Search and BM25 Keyword Search.
+
+### Why Hybrid Retrieval?
+
+FAISS retrieves documents based on semantic meaning and contextual similarity, while BM25 retrieves documents using exact keyword matching.
+
+In strategic intelligence systems, both capabilities are important:
+
+- Semantic retrieval helps identify related business developments even when different wording is used.
+- Keyword retrieval ensures that exact company names, technologies, products, and competitors are not missed.
+- Hybrid retrieval combines both approaches to improve evidence quality for executive decision-making.
+
+### Retrieval Comparison
+
+| Query | FAISS Retrieval | BM25 Retrieval | Hybrid Retrieval |
+|---------|---------|---------|---------|
+| Microsoft AI investments | Retrieved semantically related AI investment articles | Retrieved exact Microsoft investment announcements | Combined both relevant context and exact evidence |
+| Azure cloud competition | Retrieved cloud market trends and related competitors | Retrieved articles containing Azure and competitor names | Produced the most complete competitive analysis |
+| NVIDIA partnership announcements | Retrieved semiconductor and AI partnership content | Retrieved exact NVIDIA partnership news | Improved evidence coverage |
+| OpenAI enterprise adoption | Retrieved enterprise AI adoption discussions | Retrieved exact OpenAI references | Generated stronger business intelligence context |
+
+### Observations
+
+- FAISS performs well when similar concepts are expressed using different wording.
+- BM25 performs well when exact terms such as company names, products, regulations, or technologies are present.
+- Hybrid Retrieval consistently produced the highest quality evidence because it combines semantic understanding with keyword precision.
+
+### Conclusion
+
+The Hybrid Retrieval architecture was selected because executive intelligence tasks require both semantic reasoning and exact fact retrieval. Combining FAISS and BM25 improves retrieval accuracy, evidence diversity, and recommendation quality.
 ---
 
 ## 3. Strategic Signal Detection

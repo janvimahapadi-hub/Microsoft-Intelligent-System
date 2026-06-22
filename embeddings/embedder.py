@@ -44,7 +44,7 @@ def generate_embeddings():
     print(
         f"Saved to: {EMBEDDINGS_PATH}"
     )
-
+    print(f"Embedding dimension: {embeddings.shape[1]}")
 
 if __name__ == "__main__":
     generate_embeddings()

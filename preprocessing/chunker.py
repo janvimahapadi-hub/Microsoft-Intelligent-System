@@ -47,6 +47,31 @@ def split_text(text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
 
     return chunks
 
+#def split_text(text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):  chunk by words      
+    if not text:
+        return []
+
+    if overlap >= chunk_size:
+        raise ValueError("Overlap must be smaller than chunk size.")
+
+    chunks = []
+    start = 0
+    text_length = len(text)
+
+    while start < text_length:
+        end = start + chunk_size
+        chunk_text = text[start:end].strip()
+
+        if chunk_text:
+            chunks.append(chunk_text)
+
+        start = end - overlap
+
+        if start >= text_length:
+            break
+
+    return chunks
+
 
 def create_chunks():
     documents = load_cleaned_documents()
@@ -87,3 +112,7 @@ def create_chunks():
 
 if __name__ == "__main__":
     create_chunks()
+
+if chunks:
+    print("\nSample chunk:")
+    print(chunks[0]["chunk_text"][:500])

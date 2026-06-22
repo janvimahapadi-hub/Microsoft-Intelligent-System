@@ -42,7 +42,11 @@ The system acts as an AI-powered CEO advisor capable of:
 ![Workflow](screenshots/workflow.png)
 
 ---
-#📸 Dashboard Screenshots
+
+# 🔄 Data Flow Diagram
+![CEO Briefing](screenshots/data_flow.png)
+
+---
 # 📸 Dashboard Screenshots
 
 The AI CEO Strategic Intelligence Agent provides an interactive Streamlit dashboard for executive decision support.
@@ -218,79 +222,74 @@ The system retrieves relevant evidence and generates executive recommendations.
 
 ---
 
-## 6. Interactive Dashboard
-
-Includes:
-
-### 📊 Overview
-
-Project summary and intelligence metrics.
-
-### 🧠 CEO Briefing
-
-Question-driven strategic intelligence generation.
-
-### 📈 Sentiment Intelligence
-
-Sentiment and strategic signal analysis.
-
-### 🌍 Market Intelligence
-
-Topic, source, and trend analysis.
-
-### 🚀 Opportunity Monitor
-
-Business opportunity detection.
-
-### ⚠️ Risk Monitor
-
-Strategic risk monitoring.
-
-### 🏁 Competitor Intelligence
-
-Microsoft vs AWS, Google Cloud, OpenAI, and NVIDIA.
-
-### ✅ Recommendations
-
-Executive-level strategic recommendations.
-
----
-
 # 🛠️ Technologies Used
 
-## Programming Language
+| Category | Technologies |
+|-----------|-------------|
+| Programming Language | Python |
+| NLP | Sentence Transformers, Transformers |
+| Retrieval | FAISS, BM25 |
+| RAG | Hybrid Retrieval + Context Builder |
+| LLM | Ollama |
+| Data Processing | Pandas, NumPy |
+| Dashboard | Streamlit |
+| Data Collection | RSS Feeds, Technology Blogs |
+| Storage | JSON Files |
+| Visualization | Streamlit Charts |
 
-* Python
+---
+# ⚙️ Design Decisions
 
-## NLP & AI
+## Why Hybrid Retrieval?
 
-* Sentence Transformers
-* Ollama
-* Large Language Models
-* RAG
+The system combines FAISS semantic retrieval with BM25 keyword retrieval.
 
-## Retrieval
+Reasons:
 
-* FAISS
-* BM25
-
-## Data Processing
-
-* Pandas
-* NumPy
-
-## Dashboard
-
-* Streamlit
-
-## Data Collection
-
-* RSS Feeds
-* Technology Blogs
-* Competitor Sources
+- FAISS captures semantic similarity between documents and queries.
+- BM25 captures exact keywords and company names.
+- Combining both improves retrieval accuracy and evidence diversity.
+- Better evidence leads to higher-quality strategic recommendations.
 
 ---
 
+## Why Character-Based Chunking?
+
+The project uses overlapping character-based chunking.
+
+Reasons:
+
+- Produces consistent chunk sizes for embeddings.
+- Preserves context using overlap.
+- Improves retrieval recall.
+- Works effectively with FAISS vector search.
+
+Although some evidence previews may begin mid-sentence, retrieval quality and LLM reasoning remain unaffected.
+
+---
+
+## Why Local LLM (Ollama)?
+
+The system uses Ollama to run Large Language Models locally.
+
+Benefits:
+
+- No API costs.
+- Better privacy.
+- Offline execution.
+- Easier academic demonstration.
+
+---
+
+## Why Streamlit?
+
+Streamlit provides a lightweight framework for building interactive dashboards.
+
+Benefits:
+
+- Rapid development.
+- Easy visualization of intelligence outputs.
+- Supports interactive executive decision-making workflows.
 
 
 # 📂 Project Structure
@@ -314,19 +313,44 @@ Microsoft-Intelligent-System/
 ├── requirements.txt
 └── README.md
 ```
+# 🤖 AI Pipeline
 
-# 🔄 Workflow
-
-1. Collect documents from multiple sources
-2. Clean and deduplicate documents
-3. Generate chunks
-4. Create embeddings
-5. Build FAISS index
-6. Build BM25 index
-7. Perform hybrid retrieval
-8. Analyze sentiment and strategic signals
-9. Generate CEO briefing
-10. Display insights through Streamlit
+The project follows a complete NLP and Retrieval-Augmented Generation (RAG) pipeline:
+Document Collection
+(RSS feeds, blogs, news, competitor sources)
+        ↓
+Data Cleaning & Deduplication
+(Remove HTML, normalize text, remove duplicates)
+        ↓
+Chunking & Metadata Enrichment
+(Create overlapping chunks and add source information)
+        ↓
+Embedding Generation
+(Sentence Transformers)
+        ↓
+Index Construction
+(FAISS Vector Index + BM25 Keyword Index)
+        ↓
+Hybrid Retrieval
+(Combine semantic and keyword search results)
+        ↓
+Evidence Retrieval
+(Select most relevant document chunks)
+        ↓
+NLP Analysis
+(Sentiment Analysis, Topic Classification, Strategic Signals)
+        ↓
+RAG Context Builder
+(Prepare structured context for the LLM)
+        ↓
+Local LLM (Ollama)
+(Generate strategic insights and reasoning)
+        ↓
+CEO Briefing Generation
+(Risks, Opportunities, Recommendations)
+        ↓
+Dashboard Visualization
+(Streamlit Dashboard with executive insights)
 
 ---
 

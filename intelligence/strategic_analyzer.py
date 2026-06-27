@@ -1,4 +1,6 @@
 from retrieval.hybrid_retriever import HybridRetriever
+from agents.strategic_agent import StrategicAgent
+
 from llm.ollama_client import generate_response
 from llm.prompts import (
     FAST_CEO_SYSTEM_PROMPT,
@@ -7,17 +9,6 @@ from llm.prompts import (
     CHATBOT_SYSTEM_PROMPT,
     build_chat_prompt
 )
-
-
-COMPETITOR_NAMES = [
-    "aws",
-    "amazon",
-    "google",
-    "google cloud",
-    "openai",
-    "nvidia",
-    "anthropic"
-]
 
 
 def get_company_name(item):
@@ -47,64 +38,6 @@ def get_company_name(item):
     return "Microsoft"
 
 
-def question_mentions_competitor(question):
-    question_lower = question.lower()
-    return any(name in question_lower for name in COMPETITOR_NAMES)
-
-
-def build_strategic_queries(company_name, question):
-    question_lower = question.lower()
-
-    queries = [
-        question,
-        f"{company_name} AI strategy opportunities Azure Copilot Foundry",
-        f"{company_name} AI risks security governance regulation competition",
-        f"{company_name} partner ecosystem AI transformation enterprise customers",
-        f"{company_name} developer platform GitHub AI productivity opportunity",
-    ]
-
-    if "cloud" in question_lower or "azure" in question_lower:
-        queries.extend([
-            f"{company_name} cloud opportunities Azure AI infrastructure enterprise cloud",
-            f"{company_name} Azure AI infrastructure cloud security governance enterprise",
-            "AWS cloud AI infrastructure enterprise generative AI security",
-            "Google Cloud AI infrastructure enterprise Gemini cloud security",
-        ])
-
-    if "aws" in question_lower:
-        queries.extend([
-            "AWS cloud AI infrastructure enterprise generative AI security",
-            "AWS machine learning cloud infrastructure Bedrock enterprise AI",
-        ])
-
-    if "google" in question_lower or "google cloud" in question_lower:
-        queries.extend([
-            "Google Cloud AI infrastructure enterprise Gemini cloud security",
-            "Google Cloud enterprise AI agents Gemini infrastructure",
-        ])
-
-    if "openai" in question_lower:
-        queries.extend([
-            "OpenAI enterprise AI partner network Microsoft competition",
-            "OpenAI model deployment enterprise AI risk partnership",
-        ])
-
-    if "nvidia" in question_lower:
-        queries.extend([
-            "NVIDIA AI infrastructure GPU enterprise cloud competition",
-            "NVIDIA AI platform enterprise infrastructure opportunity",
-        ])
-
-    if "security" in question_lower or "cyber" in question_lower:
-        queries.extend([
-            f"{company_name} cybersecurity AI security Defender governance",
-            "AWS security AI cloud security threat investigation",
-            "Google Cloud security digital sovereignty cloud governance",
-        ])
-
-    return queries
-
-
 def deduplicate_evidence(evidence_items, max_items=5):
     seen = set()
     unique_items = []
@@ -126,61 +59,52 @@ def deduplicate_evidence(evidence_items, max_items=5):
     return unique_items[:max_items]
 
 
-def calculate_confidence(evidence_items):
-    """
-    Realistic retrieval confidence.
+def is_bad_evidence(item):
+    title = item.get("title", "").lower()
+    source = item.get("source", "").lower()
+    evidence = item.get("evidence", "").lower()
 
-    Confidence should not become 1.00 just because five chunks were retrieved.
-    It should consider evidence count, unique URLs, source diversity,
-    and company diversity.
-    """
+    bad_terms = [
+        "weekly employment",
+        "employment q&a",
+        "job search",
+        "resume",
+        "interview",
+        "hiring",
+        "study buddy",
+        "open to work"
+    ]
 
-    if not evidence_items:
-        return 0.0
+    if any(term in title or term in evidence for term in bad_terms):
+        return True
 
-    sources = set()
-    source_types = set()
-    urls = set()
-    companies = set()
+    if "reddit" in source and any(term in title for term in bad_terms):
+        return True
 
-    for item in evidence_items:
-        if item.get("source"):
-            sources.add(item.get("source"))
+    return False
 
-        if item.get("source_type"):
-            source_types.add(item.get("source_type"))
 
-        if item.get("url"):
-            urls.add(item.get("url"))
+def is_incomplete_answer(answer):
+    if not answer or len(answer.strip()) < 120:
+        return True
 
-        companies.add(get_company_name(item))
+    required_keywords = [
+        "Executive diagnosis",
+        "Recommended CEO decision",
+        "90-day",
+        "KPI",
+        "risk",
+        "Evidence"
+    ]
 
-    evidence_count = len(evidence_items)
-    source_count = len(sources)
-    source_type_count = len(source_types)
-    url_count = len(urls)
-    company_count = len(companies)
+    answer_lower = answer.lower()
+    found = 0
 
-    confidence = 0.0
+    for keyword in required_keywords:
+        if keyword.lower() in answer_lower:
+            found += 1
 
-    confidence += min(evidence_count / 5, 1.0) * 0.25
-    confidence += min(source_count / 4, 1.0) * 0.25
-    confidence += min(url_count / 5, 1.0) * 0.20
-    confidence += min(company_count / 3, 1.0) * 0.20
-    confidence += min(source_type_count / 2, 1.0) * 0.10
-
-    if source_count < 3:
-        confidence -= 0.10
-
-    if company_count < 2:
-        confidence -= 0.15
-
-    if url_count < evidence_count:
-        confidence -= 0.05
-
-    confidence = max(min(confidence, 0.95), 0.0)
-
-    return round(confidence, 2)
+    return found < 3
 
 
 def build_fallback_playbook(company_name, strategic_question, evidence_items, error_message):
@@ -199,37 +123,34 @@ def build_fallback_playbook(company_name, strategic_question, evidence_items, er
 
 The system retrieved evidence for the question: **{strategic_question}**.
 
-The local LLM was too slow, unavailable, or returned an incomplete response, so this fallback playbook was created using retrieved evidence metadata. Treat this as structured decision support, not a final strategic decision.
+The local LLM was too slow, unavailable, or returned an incomplete response, so this fallback playbook was created using retrieved evidence metadata.
 
 ## 2. Strategic meaning
 
-The retrieved evidence indicates that {company_name} should evaluate this topic through business impact, execution feasibility, competitive positioning, and strategic risk. The key management challenge is to convert broad AI and cloud momentum into measurable initiatives with clear owners, KPIs, and risk controls.
+The evidence indicates that {company_name} should evaluate this topic through business impact, execution feasibility, competitive positioning, and strategic risk.
 
 ## 3. Priority opportunities
 
 1. **Scale enterprise AI infrastructure**
    - Focus on Azure AI, Microsoft Foundry, enterprise agents, and secure AI deployment.
-   - KPI: production AI workloads, adoption rate, deployment speed.
 
 2. **Strengthen ecosystem and partner-led adoption**
-   - Use partners, developers, and enterprise channels to accelerate market reach.
-   - KPI: partner-led pipeline, enterprise deployments, customer retention.
+   - Use partners, developers, and enterprise channels to accelerate adoption.
 
 3. **Improve governance and security differentiation**
    - Make trust, security, compliance, and governance core differentiators.
-   - KPI: secure deployment rate, governance coverage, incident reduction.
 
 ## 4. 90-day execution plan
 
 ### First 30 days
-- Identify the top two evidence-backed opportunity themes.
-- Assign owners from Azure, AI Platform, Security, Product Strategy, and Partner teams.
-- Define measurable success criteria.
+- Identify top evidence-backed opportunity themes.
+- Assign owners.
+- Define KPIs.
 
 ### Days 31-60
-- Launch focused pilots for the highest-value cloud or AI opportunity.
-- Validate technical feasibility, customer demand, cost impact, and security requirements.
-- Compare Microsoft positioning against competitor evidence where available.
+- Launch focused pilots.
+- Validate feasibility and customer value.
+- Compare Microsoft positioning against competitor evidence.
 
 ### Days 61-90
 - Scale the strongest pilot.
@@ -238,19 +159,19 @@ The retrieved evidence indicates that {company_name} should evaluate this topic 
 
 ## 5. Owners and KPIs
 
-- **Owners:** Azure leadership, AI Platform, Microsoft Foundry, Security, Product Strategy, Sales, Partner Ecosystem.
-- **KPIs:** Azure AI workload growth, Foundry adoption, customer pipeline impact, deployment speed, governance coverage, risk reduction.
+- **Owners:** Azure, AI Platform, Security, Product Strategy, Sales, Partner Ecosystem.
+- **KPIs:** adoption, deployment speed, governance coverage, customer pipeline impact.
 
 ## 6. Main risks and mitigations
 
-- **Risk:** Evidence may be concentrated in limited sources.  
-  **Mitigation:** Add more competitor, market, and customer evidence.
+- **Risk:** Limited evidence diversity.  
+  **Mitigation:** Add competitor, market, and customer evidence.
 
-- **Risk:** Recommendations may be too broad.  
-  **Mitigation:** Require every recommendation to include owner, KPI, timeline, and evidence.
+- **Risk:** Recommendations may be broad.  
+  **Mitigation:** Require owner, KPI, timeline, and evidence.
 
-- **Risk:** Local LLM may be slow during demo.  
-  **Mitigation:** Use fast mode, cached retrieval, smaller model, and fallback output.
+- **Risk:** Local LLM may be slow.  
+  **Mitigation:** Use fast mode and fallback output.
 
 ## 7. Evidence used
 
@@ -294,104 +215,171 @@ Use the retrieved evidence to create a focused execution plan with:
 
 {evidence_text}
 
-### Limitation
-
-This fallback response does not include full LLM reasoning. To improve the answer, use a smaller local model, reduce top_k, or shorten evidence text.
-
 Fallback reason: {error_message}
 """
-
-
-def is_incomplete_answer(answer):
-    if not answer or len(answer.strip()) < 120:
-        return True
-
-    required_keywords = [
-        "Executive diagnosis",
-        "Recommended CEO decision",
-        "90-day",
-        "KPI",
-        "risk",
-        "Evidence"
-    ]
-
-    answer_lower = answer.lower()
-    found = 0
-
-    for keyword in required_keywords:
-        if keyword.lower() in answer_lower:
-            found += 1
-
-    return found < 3
-
-
-def is_bad_evidence(item):
-    title = item.get("title", "").lower()
-    source = item.get("source", "").lower()
-    evidence = item.get("evidence", "").lower()
-
-    bad_terms = [
-        "weekly employment",
-        "employment q&a",
-        "job search",
-        "resume",
-        "interview",
-        "hiring",
-        "study buddy",
-        "open to work"
-    ]
-
-    if any(term in title or term in evidence for term in bad_terms):
-        return True
-
-    if "reddit" in source and any(term in title for term in bad_terms):
-        return True
-
-    return False
 
 
 class StrategicAnalyzer:
     def __init__(self, company_name="Microsoft"):
         self.company_name = company_name
+
+        # Backup/simple retrieval
         self.retriever = HybridRetriever()
 
-    def retrieve_strategic_evidence(self, strategic_question, top_k=5):
-        all_evidence = []
+        # Agentic workflow layer
+        self.agent = StrategicAgent()
 
-        queries = build_strategic_queries(
-            self.company_name,
-            strategic_question
+    def retrieve_strategic_evidence(self, strategic_question, top_k=5):
+        """
+        Backup retrieval if the agent workflow fails.
+        """
+
+        raw_results = self.retriever.search(
+            strategic_question,
+            top_k=top_k * 3
         )
 
-        for query in queries:
-            results = self.retriever.search(query, top_k=4)
-            all_evidence.extend(results)
-
         clean_evidence = [
-            item for item in all_evidence
+            item for item in raw_results
             if not is_bad_evidence(item)
         ]
 
-        selected_evidence = deduplicate_evidence(
+        return deduplicate_evidence(
             clean_evidence,
             max_items=top_k
         )
 
-        return selected_evidence
+    def build_agent_context_text(self, agent_result):
+        plan = agent_result.get("plan", {})
+        tool_decision = agent_result.get("tool_decision", {})
+        analysis = agent_result.get("analysis", {})
+        validation = agent_result.get("validation", {})
+        memory_context = agent_result.get("memory_context", "")
 
-    def analyze(self, strategic_question, top_k=5, mode="playbook"):
-        evidence_items = self.retrieve_strategic_evidence(
-            strategic_question,
-            top_k=top_k
-        )
+        plan_steps = plan.get("steps", [])
+        selected_tools = tool_decision.get("selected_tools", [])
+        warnings = validation.get("warnings", [])
 
-        confidence = calculate_confidence(evidence_items)
+        return f"""
+Agent Workflow Summary:
+
+Goal:
+{agent_result.get("goal", "")}
+
+Plan:
+{chr(10).join("- " + step for step in plan_steps)}
+
+Selected Tools:
+{", ".join(selected_tools)}
+
+Analysis:
+- Dominant signal: {analysis.get("analysis_summary", {}).get("dominant_signal", "Unknown")}
+- Risk evidence count: {analysis.get("risk_count", 0)}
+- Opportunity evidence count: {analysis.get("opportunity_count", 0)}
+- Competitor evidence count: {analysis.get("competitor_count", 0)}
+- Market evidence count: {analysis.get("market_count", 0)}
+- Dashboard risk signals: {analysis.get("dashboard_risk_signals", 0)}
+- Dashboard opportunity signals: {analysis.get("dashboard_opportunity_signals", 0)}
+
+Validation:
+- Status: {validation.get("validation_status", "Unknown")}
+- Confidence: {validation.get("confidence", 0.0)}
+- Evidence count: {validation.get("evidence_count", 0)}
+- Source count: {validation.get("source_count", 0)}
+- Company count: {validation.get("company_count", 0)}
+- Warnings: {", ".join(warnings) if warnings else "No major validation warnings"}
+
+Memory:
+{memory_context}
+"""
+
+    def analyze(self, strategic_question, top_k=5, mode="fast"):
+        """
+        Main agentic workflow:
+
+        Goal
+          ↓
+        Plan
+          ↓
+        Tool Selection
+          ↓
+        Retrieve
+          ↓
+        Analyze
+          ↓
+        Validate
+          ↓
+        Recommend
+          ↓
+        Store Memory
+        """
+
+        try:
+            agent_result = self.agent.execute(
+                user_goal=strategic_question,
+                top_k=top_k
+            )
+
+            evidence_items = agent_result.get("evidence", [])
+
+            evidence_items = [
+                item for item in evidence_items
+                if not is_bad_evidence(item)
+            ]
+
+            evidence_items = deduplicate_evidence(
+                evidence_items,
+                max_items=top_k
+            )
+
+            confidence = agent_result.get("confidence", 0.0)
+            agent_context = self.build_agent_context_text(agent_result)
+
+        except Exception as agent_error:
+            evidence_items = self.retrieve_strategic_evidence(
+                strategic_question,
+                top_k=top_k
+            )
+
+            confidence = 0.50
+
+            agent_result = {
+                "error": str(agent_error),
+                "goal": strategic_question,
+                "plan": {},
+                "tool_decision": {},
+                "analysis": {},
+                "validation": {
+                    "validation_status": "Fallback",
+                    "confidence": confidence,
+                    "warnings": [str(agent_error)]
+                },
+                "memory_context": "Agent memory unavailable because agent workflow failed."
+            }
+
+            agent_context = f"""
+Agent Workflow Summary:
+The agent workflow failed, so backup retrieval was used.
+
+Agent error:
+{agent_error}
+"""
 
         user_prompt = build_ceo_prompt(
             company_name=self.company_name,
             strategic_question=strategic_question,
             evidence_items=evidence_items
         )
+
+        user_prompt = f"""
+{agent_context}
+
+{user_prompt}
+
+Additional instruction:
+Use the agent plan, selected tools, analysis, validation result, and memory context when forming the recommendation.
+If validation status is weak or warnings exist, mention the limitation clearly.
+"""
 
         try:
             selected_prompt = (
@@ -411,7 +399,13 @@ class StrategicAnalyzer:
                     "LLM response was incomplete. Using fallback playbook."
                 )
 
-            llm_status = "LLM generation successful"
+            llm_status = "LLM generation successful with agent workflow"
+
+            # Store final generated answer in memory
+            try:
+                self.agent.memory_agent.update_latest_answer(answer)
+            except Exception:
+                pass
 
         except Exception as error:
             answer = build_fallback_playbook(
@@ -423,13 +417,27 @@ class StrategicAnalyzer:
 
             llm_status = f"Fallback used because LLM failed: {error}"
 
+            # Store fallback answer in memory too
+            try:
+                self.agent.memory_agent.update_latest_answer(answer)
+            except Exception:
+                pass
+
         return {
             "company": self.company_name,
             "question": strategic_question,
             "retrieval_confidence": confidence,
             "answer": answer,
             "evidence": evidence_items,
-            "llm_status": llm_status
+            "llm_status": llm_status,
+
+            # Agent fields for dashboard/exam explanation
+            "agent_plan": agent_result.get("plan", {}),
+            "agent_tools": agent_result.get("tool_decision", {}),
+            "agent_analysis": agent_result.get("analysis", {}),
+            "agent_validation": agent_result.get("validation", {}),
+            "agent_memory": self.agent.memory_agent.get_recent_memory(),
+            "agent_memory_context": self.agent.memory_agent.build_memory_context()
         }
 
     def answer_followup(self, user_question, previous_briefing="", top_k=3, mode="chat"):
@@ -453,10 +461,12 @@ class StrategicAnalyzer:
             max_items=top_k
         )
 
+        memory_context = self.agent.memory_agent.build_memory_context()
+
         user_prompt = build_chat_prompt(
             company_name=self.company_name,
             user_question=user_question,
-            previous_briefing=previous_briefing,
+            previous_briefing=previous_briefing + "\n\nAgent Memory:\n" + memory_context,
             evidence_items=evidence_items
         )
 
@@ -472,7 +482,7 @@ class StrategicAnalyzer:
                     "LLM follow-up response was empty or incomplete."
                 )
 
-            llm_status = "LLM follow-up generation successful"
+            llm_status = "LLM follow-up generation successful with memory"
 
         except Exception as error:
             answer = build_fallback_chat_answer(
@@ -488,7 +498,8 @@ class StrategicAnalyzer:
             "question": user_question,
             "answer": answer,
             "evidence": evidence_items,
-            "llm_status": llm_status
+            "llm_status": llm_status,
+            "agent_memory": self.agent.memory_agent.get_recent_memory()
         }
 
 
@@ -512,6 +523,22 @@ if __name__ == "__main__":
     print("RETRIEVAL CONFIDENCE:", result["retrieval_confidence"])
     print("LLM STATUS:", result["llm_status"])
     print("=" * 120)
+
+    print("\nAGENT PLAN")
+    print("=" * 120)
+    print(result["agent_plan"])
+
+    print("\nAGENT TOOLS")
+    print("=" * 120)
+    print(result["agent_tools"])
+
+    print("\nAGENT VALIDATION")
+    print("=" * 120)
+    print(result["agent_validation"])
+
+    print("\nAGENT MEMORY")
+    print("=" * 120)
+    print(result["agent_memory"])
 
     print("\nEVIDENCE USED")
     print("=" * 120)

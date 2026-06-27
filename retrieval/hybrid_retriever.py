@@ -142,9 +142,9 @@ class HybridRetriever:
                         (dist - min_distance) / (max_distance - min_distance)
                     )
 
-        # -----------------------------
+        
         # BM25 keyword retrieval
-        # -----------------------------
+    
         tokenized_query = tokenize(query)
         bm25_scores_raw = self.bm25.get_scores(tokenized_query)
 

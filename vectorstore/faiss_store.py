@@ -22,7 +22,7 @@ def build_faiss_index():
 
     dimension = embeddings.shape[1]
 
-    index = faiss.IndexFlatL2(dimension)
+    index = faiss.IndexFlatL2(dimension)             ##IndexFlatIP=used for semantic similarity
     index.add(embeddings)
 
     faiss.write_index(index, FAISS_INDEX_PATH)

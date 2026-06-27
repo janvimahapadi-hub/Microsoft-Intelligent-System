@@ -62,7 +62,6 @@ def ask_ollama(
         "stream": True,
         "options": {
             "temperature": temperature,
-            "top_p": 0.9,
             "num_predict": num_predict,
             "num_ctx": num_ctx
         }

@@ -4,8 +4,8 @@ from pathlib import Path
 from agents.planner_agent import PlannerAgent
 from agents.tool_agent import ToolAgent
 from agents.validation_agent import ValidationAgent
-from retrieval.hybrid_retriever import HybridRetriever
 from agents.memory_agent import MemoryAgent
+from retrieval.hybrid_retriever import HybridRetriever
 
 
 SENTIMENT_RESULTS_PATH = Path("data/sentiment_results.json")
@@ -15,28 +15,18 @@ class StrategicAgent:
     """
     Strategic Agent / Orchestrator
 
-    This agent controls the agentic workflow:
+    It controls:
+    Goal → Plan → Tool Selection → Retrieval → Analysis → Validation → Memory
 
-    Goal
-      ↓
-    Plan
-      ↓
-    Tool Selection
-      ↓
-    Use Existing Tools
-      - Hybrid Retrieval Tool
-      - Sentiment / Strategic Signal Tool
-      - Competitor / Market Evidence
-      ↓
-    Validation
-      ↓
-    Return evidence and agent reasoning to Strategic Analyzer
+    It does not generate the final CEO briefing.
+    The final LLM generation happens in StrategicAnalyzer through Ollama.
     """
 
     def __init__(self):
         self.planner = PlannerAgent()
         self.tool_agent = ToolAgent()
         self.validation_agent = ValidationAgent()
+        self.memory_agent = MemoryAgent()
 
         # Existing project tool
         self.retriever = HybridRetriever()
@@ -174,59 +164,57 @@ class StrategicAgent:
             }
         }
 
-def execute(self, user_goal, top_k=5):
+    def execute(self, user_goal, top_k=5):
+        # Step 1: Planning
+        plan = self.planner.create_plan(user_goal)
 
-    # Step 1
-    plan = self.planner.create_plan(user_goal)
+        # Step 2: Tool selection
+        tool_decision = self.tool_agent.select_tools(plan)
+        selected_tools = tool_decision.get("selected_tools", [])
 
-    # Step 2
-    tool_decision = self.tool_agent.select_tools(plan)
+        # Step 3: Retrieval using HybridRetriever tool
+        retrieved_data = self.retrieve_evidence(
+            goal=user_goal,
+            selected_tools=selected_tools,
+            top_k=top_k
+        )
 
-    selected_tools = tool_decision.get("selected_tools", [])
+        # Step 4: Analysis using existing evidence + sentiment results
+        analysis = self.analyze_with_existing_tools(
+            goal=user_goal,
+            evidence_items=retrieved_data.get("evidence", []),
+            selected_tools=selected_tools
+        )
 
-    # Step 3
-    retrieved_data = self.retrieve_evidence(
-        goal=user_goal,
-        selected_tools=selected_tools,
-        top_k=top_k
-    )
+        # Step 5: Validation
+        validation = self.validation_agent.validate(
+            goal=user_goal,
+            plan=plan,
+            tool_decision=tool_decision,
+            retrieved_data=retrieved_data,
+            analysis_result=analysis
+        )
 
-    # Step 4
-    analysis = self.analyze_with_existing_tools(
-        goal=user_goal,
-        evidence_items=retrieved_data.get("evidence", []),
-        selected_tools=selected_tools
-    )
+        # Step 6: Memory
+        memory = self.memory_agent.save_interaction(
+            user_goal=user_goal,
+            plan=plan,
+            tool_decision=tool_decision,
+            validation=validation,
+            evidence_items=retrieved_data.get("evidence", []),
+            answer=None
+        )
 
-    # Step 5
-    validation = self.validation_agent.validate(
-        goal=user_goal,
-        plan=plan,
-        tool_decision=tool_decision,
-        retrieved_data=retrieved_data,
-        analysis_result=analysis
-    )
-
-    # <-- ADD MEMORY HERE
-    memory = self.memory_agent.save_interaction(
-        user_goal=user_goal,
-        plan=plan,
-        tool_decision=tool_decision,
-        validation=validation,
-        evidence_items=retrieved_data.get("evidence", []),
-        answer=None
-    )
-
-    return {
-        "goal": user_goal,
-        "plan": plan,
-        "tool_decision": tool_decision,
-        "retrieval": retrieved_data,
-        "analysis": analysis,
-        "validation": validation,
-        "memory": memory,
-        "memory_context": self.memory_agent.build_memory_context(),
-        "evidence": retrieved_data.get("evidence", []),
-        "confidence": validation.get("confidence", 0.0),
-        "ready": validation.get("is_ready_for_recommendation", False)
-    }
+        return {
+            "goal": user_goal,
+            "plan": plan,
+            "tool_decision": tool_decision,
+            "retrieval": retrieved_data,
+            "analysis": analysis,
+            "validation": validation,
+            "memory": memory,
+            "memory_context": self.memory_agent.build_memory_context(),
+            "evidence": retrieved_data.get("evidence", []),
+            "confidence": validation.get("confidence", 0.0),
+            "ready": validation.get("is_ready_for_recommendation", False)
+        }

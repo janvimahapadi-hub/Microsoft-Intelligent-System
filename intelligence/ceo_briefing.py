@@ -34,17 +34,28 @@ class CEOBriefing:
         )
 
         return {
-            "company": result.get("company", self.company_name),
-            "question": result.get("question", ""),
-            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "briefing": result.get("answer", ""),
-            "retrieval_confidence": result.get("retrieval_confidence", 0.0),
-            "llm_status": result.get("llm_status", ""),
-            "evidence_count": len(evidence),
-            "sources": sources,
-            "source_types": source_types,
-            "evidence": evidence,
-        }
+    "company": result.get("company", self.company_name),
+    "question": result.get("question", ""),
+    "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    "briefing": result.get("answer", ""),
+    "retrieval_confidence": result.get("retrieval_confidence", 0.0),
+    "llm_status": result.get("llm_status", ""),
+    "evidence_count": len(evidence),
+    "sources": sources,
+    "source_types": source_types,
+    "evidence": evidence,
+
+    # Agentic workflow fields
+    "agent_result": result.get("agent_result", {}),
+    "validation": result.get("validation", {}),
+    "agent_decision": result.get("agent_decision", {}),
+    "agent_plan": result.get("agent_plan", {}),
+    "agent_tools": result.get("agent_tools", {}),
+    "agent_analysis": result.get("agent_analysis", {}),
+    "agent_workflow": result.get("agent_workflow", []),
+    "agent_memory": result.get("agent_memory", []),
+    "agent_memory_context": result.get("agent_memory_context", "")
+}
 
     def generate_markdown_report(self, report):
         evidence_lines = []

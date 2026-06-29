@@ -9,7 +9,7 @@ OLLAMA_URL = "http://localhost:11434/api/generate"
 # You can override model from PowerShell:
 # $env:OLLAMA_MODEL="llama3.2:3b"
 # streamlit run app.py
-MODEL_NAME = os.getenv("OLLAMA_MODEL", "qwen3:8b")
+MODEL_NAME = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 
 DEBUG_LLM = os.getenv("DEBUG_LLM", "0") == "1"
 

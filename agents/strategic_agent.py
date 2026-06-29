@@ -4,8 +4,8 @@ from pathlib import Path
 from agents.planner_agent import PlannerAgent
 from agents.tool_agent import ToolAgent
 from agents.validation_agent import ValidationAgent
-from retrieval.hybrid_retriever import HybridRetriever
 from agents.memory_agent import MemoryAgent
+from retrieval.hybrid_retriever import HybridRetriever
 
 
 SENTIMENT_RESULTS_PATH = Path("data/sentiment_results.json")
@@ -15,38 +15,41 @@ class StrategicAgent:
     """
     Strategic Agent / Orchestrator
 
-    This agent controls the agentic workflow:
+    This class demonstrates the required agentic workflow:
 
     Goal
       ↓
     Plan
       ↓
-    Tool Selection
+    Autonomous Tool Selection
       ↓
-    Use Existing Tools
-      - Hybrid Retrieval Tool
-      - Sentiment / Strategic Signal Tool
-      - Competitor / Market Evidence
+    Evidence Retrieval
+      ↓
+    Strategic Analysis
+      ↓
+    Decision
       ↓
     Validation
       ↓
-    Return evidence and agent reasoning to Strategic Analyzer
+    Memory Update
     """
 
     def __init__(self):
         self.planner = PlannerAgent()
         self.tool_agent = ToolAgent()
         self.validation_agent = ValidationAgent()
-
-        # Existing project tool
+        self.memory_agent = MemoryAgent()
         self.retriever = HybridRetriever()
 
     def load_sentiment_results(self):
         if not SENTIMENT_RESULTS_PATH.exists():
             return []
 
-        with open(SENTIMENT_RESULTS_PATH, "r", encoding="utf-8") as file:
-            return json.load(file)
+        try:
+            with open(SENTIMENT_RESULTS_PATH, "r", encoding="utf-8") as file:
+                return json.load(file)
+        except Exception:
+            return []
 
     def build_retrieval_queries(self, goal, selected_tools):
         queries = [goal]
@@ -75,6 +78,7 @@ class StrategicAgent:
                 "AI cloud market trends enterprise adoption Microsoft competitors"
             ])
 
+        # Remove duplicates while preserving order
         return list(dict.fromkeys(queries))
 
     def retrieve_evidence(self, goal, selected_tools, top_k=5):
@@ -86,8 +90,11 @@ class StrategicAgent:
         all_results = []
 
         for query in queries:
-            results = self.retriever.search(query, top_k=3)
-            all_results.extend(results)
+            try:
+                results = self.retriever.search(query, top_k=3)
+                all_results.extend(results)
+            except Exception:
+                continue
 
         unique_results = []
         seen = set()
@@ -106,10 +113,12 @@ class StrategicAgent:
             key=lambda x: x.get("score", 999999)
         )
 
+        final_evidence = unique_results[:top_k]
+
         return {
             "queries_used": queries,
-            "evidence": unique_results[:top_k],
-            "retrieval_count": len(unique_results[:top_k])
+            "evidence": final_evidence,
+            "retrieval_count": len(final_evidence)
         }
 
     def analyze_with_existing_tools(self, goal, evidence_items, selected_tools):
@@ -122,21 +131,51 @@ class StrategicAgent:
 
         for item in evidence_items:
             text = " ".join([
-                item.get("title", ""),
-                item.get("source", ""),
-                item.get("evidence", "")
+                str(item.get("title", "")),
+                str(item.get("source", "")),
+                str(item.get("evidence", "")),
+                str(item.get("chunk_text", "")),
+                str(item.get("text", ""))
             ]).lower()
 
-            if any(word in text for word in ["risk", "security", "threat", "governance", "compliance"]):
+            if any(word in text for word in [
+                "risk",
+                "security",
+                "threat",
+                "governance",
+                "compliance",
+                "vulnerability"
+            ]):
                 risk_count += 1
 
-            if any(word in text for word in ["opportunity", "growth", "azure", "copilot", "foundry", "enterprise"]):
+            if any(word in text for word in [
+                "opportunity",
+                "growth",
+                "azure",
+                "copilot",
+                "foundry",
+                "enterprise",
+                "investment"
+            ]):
                 opportunity_count += 1
 
-            if any(word in text for word in ["aws", "google", "openai", "nvidia", "anthropic"]):
+            if any(word in text for word in [
+                "aws",
+                "google",
+                "openai",
+                "nvidia",
+                "anthropic",
+                "competitor"
+            ]):
                 competitor_count += 1
 
-            if any(word in text for word in ["market", "trend", "industry", "adoption"]):
+            if any(word in text for word in [
+                "market",
+                "trend",
+                "industry",
+                "adoption",
+                "demand"
+            ]):
                 market_count += 1
 
         dashboard_risks = 0
@@ -174,59 +213,106 @@ class StrategicAgent:
             }
         }
 
-def execute(self, user_goal, top_k=5):
+    def build_decision(self, tool_decision, validation):
+        selected_tools = tool_decision.get("selected_tools", [])
+        confidence = validation.get("confidence", 0.0)
+        ready = validation.get("is_ready_for_recommendation", False)
+        warnings = validation.get("warnings", [])
 
-    # Step 1
-    plan = self.planner.create_plan(user_goal)
+        if ready:
+            decision_status = "Recommendation approved for presentation"
+        else:
+            decision_status = "Recommendation requires caution because validation confidence is weak"
 
-    # Step 2
-    tool_decision = self.tool_agent.select_tools(plan)
+        return {
+            "selected_tools": selected_tools,
+            "tool_selection_reason": tool_decision.get(
+                "reason",
+                "Tools selected based on agent planning."
+            ),
+            "validation_status": validation.get("validation_status", "Unknown"),
+            "confidence": confidence,
+            "ready_for_recommendation": ready,
+            "decision_status": decision_status,
+            "warnings": warnings
+        }
 
-    selected_tools = tool_decision.get("selected_tools", [])
+    def execute(self, user_goal, top_k=5):
+        """
+        Main agent workflow.
 
-    # Step 3
-    retrieved_data = self.retrieve_evidence(
-        goal=user_goal,
-        selected_tools=selected_tools,
-        top_k=top_k
-    )
+        This method is called by StrategicAnalyzer.
+        """
 
-    # Step 4
-    analysis = self.analyze_with_existing_tools(
-        goal=user_goal,
-        evidence_items=retrieved_data.get("evidence", []),
-        selected_tools=selected_tools
-    )
+        # Step 1: Planning
+        plan = self.planner.create_plan(user_goal)
 
-    # Step 5
-    validation = self.validation_agent.validate(
-        goal=user_goal,
-        plan=plan,
-        tool_decision=tool_decision,
-        retrieved_data=retrieved_data,
-        analysis_result=analysis
-    )
+        # Step 2: Autonomous tool selection
+        tool_decision = self.tool_agent.select_tools(plan)
+        selected_tools = tool_decision.get("selected_tools", [])
 
-    # <-- ADD MEMORY HERE
-    memory = self.memory_agent.save_interaction(
-        user_goal=user_goal,
-        plan=plan,
-        tool_decision=tool_decision,
-        validation=validation,
-        evidence_items=retrieved_data.get("evidence", []),
-        answer=None
-    )
+        # Step 3: Evidence retrieval
+        retrieved_data = self.retrieve_evidence(
+            goal=user_goal,
+            selected_tools=selected_tools,
+            top_k=top_k
+        )
 
-    return {
-        "goal": user_goal,
-        "plan": plan,
-        "tool_decision": tool_decision,
-        "retrieval": retrieved_data,
-        "analysis": analysis,
-        "validation": validation,
-        "memory": memory,
-        "memory_context": self.memory_agent.build_memory_context(),
-        "evidence": retrieved_data.get("evidence", []),
-        "confidence": validation.get("confidence", 0.0),
-        "ready": validation.get("is_ready_for_recommendation", False)
-    }
+        evidence_items = retrieved_data.get("evidence", [])
+
+        # Step 4: Strategic analysis
+        analysis = self.analyze_with_existing_tools(
+            goal=user_goal,
+            evidence_items=evidence_items,
+            selected_tools=selected_tools
+        )
+
+        # Step 5: Validation before recommendation
+        validation = self.validation_agent.validate(
+            goal=user_goal,
+            plan=plan,
+            tool_decision=tool_decision,
+            retrieved_data=retrieved_data,
+            analysis_result=analysis
+        )
+
+        # Step 6: Agent decision
+        decision = self.build_decision(
+            tool_decision=tool_decision,
+            validation=validation
+        )
+
+        # Step 7: Store memory
+        memory = self.memory_agent.save_interaction(
+            user_goal=user_goal,
+            plan=plan,
+            tool_decision=tool_decision,
+            validation=validation,
+            evidence_items=evidence_items,
+            answer=None
+        )
+
+        return {
+            "goal": user_goal,
+            "workflow": [
+                "Goal received",
+                "Plan created by PlannerAgent",
+                "Tools selected autonomously by ToolAgent",
+                "Evidence retrieved using HybridRetriever",
+                "Risks, opportunities, competitors, and market signals analyzed",
+                "Recommendation validated by ValidationAgent",
+                "Agent decision created",
+                "Interaction stored in MemoryAgent"
+            ],
+            "plan": plan,
+            "tool_decision": tool_decision,
+            "retrieval": retrieved_data,
+            "analysis": analysis,
+            "validation": validation,
+            "decision": decision,
+            "memory": memory,
+            "memory_context": self.memory_agent.build_memory_context(),
+            "evidence": evidence_items,
+            "confidence": validation.get("confidence", 0.0),
+            "ready": validation.get("is_ready_for_recommendation", False)
+        }

@@ -1,5 +1,5 @@
-from retrieval.hybrid_retriever import HybridRetriever
 from agents.strategic_agent import StrategicAgent
+from retrieval.hybrid_retriever import HybridRetriever
 
 from llm.ollama_client import generate_response
 from llm.prompts import (
@@ -83,29 +83,43 @@ def is_bad_evidence(item):
 
     return False
 
-
 def is_incomplete_answer(answer):
-    if not answer or len(answer.strip()) < 120:
+    """
+    Practical completeness check for local Ollama models.
+
+    We do not require an exact END marker because small local models may skip it.
+    Instead, we check whether the answer contains enough CEO briefing structure.
+    """
+
+    if not answer or len(answer.strip()) < 350:
         return True
 
-    required_keywords = [
-        "Executive diagnosis",
-        "Recommended CEO decision",
+    answer_lower = answer.lower()
+
+    important_sections = [
+        "executive diagnosis",
+        "recommended ceo decision",
         "90-day",
-        "KPI",
+        "owners",
+        "kpi",
         "risk",
-        "Evidence"
+        "evidence used"
     ]
 
-    answer_lower = answer.lower()
-    found = 0
+    found_sections = 0
 
-    for keyword in required_keywords:
-        if keyword.lower() in answer_lower:
-            found += 1
+    for section in important_sections:
+        if section in answer_lower:
+            found_sections += 1
 
-    return found < 3
+    # Evidence section is important because it usually appears near the end.
+    has_evidence_section = "evidence used" in answer_lower
 
+    # Accept if it has evidence and most required sections.
+    if has_evidence_section and found_sections >= 5:
+        return False
+
+    return True
 
 def build_fallback_playbook(company_name, strategic_question, evidence_items, error_message):
     evidence_titles = []
@@ -293,6 +307,57 @@ Memory:
 {memory_context}
 """
 
+    def build_agent_decision(self, agent_result):
+        """
+        Converts validation + tool decision into a clear decision object
+        for dashboard display and examiner explanation.
+        """
+
+        validation = agent_result.get("validation", {})
+        tool_decision = agent_result.get("tool_decision", {})
+
+        confidence = validation.get("confidence", 0.0)
+        ready = validation.get("is_ready_for_recommendation", False)
+        validation_status = validation.get("validation_status", "Unknown")
+        warnings = validation.get("warnings", [])
+        selected_tools = tool_decision.get("selected_tools", [])
+
+        if ready:
+            decision_status = "Recommendation approved for presentation"
+        else:
+            decision_status = "Recommendation requires caution because validation confidence is weak"
+
+        return {
+            "selected_tools": selected_tools,
+            "tool_selection_reason": tool_decision.get(
+                "reason",
+                "No tool selection reason available."
+            ),
+            "validation_status": validation_status,
+            "confidence": confidence,
+            "ready_for_recommendation": ready,
+            "decision_status": decision_status,
+            "warnings": warnings
+        }
+
+    def get_memory_safely(self):
+        try:
+            return self.agent.memory_agent.get_recent_memory()
+        except Exception:
+            return []
+
+    def get_memory_context_safely(self):
+        try:
+            return self.agent.memory_agent.build_memory_context()
+        except Exception:
+            return "Memory context unavailable."
+
+    def update_latest_answer_safely(self, answer):
+        try:
+            self.agent.memory_agent.update_latest_answer(answer)
+        except Exception:
+            pass
+
     def analyze(self, strategic_question, top_k=5, mode="fast"):
         """
         Main agentic workflow:
@@ -346,12 +411,47 @@ Memory:
             agent_result = {
                 "error": str(agent_error),
                 "goal": strategic_question,
-                "plan": {},
-                "tool_decision": {},
-                "analysis": {},
+                "workflow": [
+                    "Goal received",
+                    "Agent workflow failed",
+                    "Backup retrieval used",
+                    "Fallback validation created"
+                ],
+                "plan": {
+                    "question_type": "fallback",
+                    "steps": [
+                        "Use backup retrieval",
+                        "Filter bad evidence",
+                        "Generate fallback briefing"
+                    ]
+                },
+                "tool_decision": {
+                    "selected_tools": ["backup_hybrid_retrieval"],
+                    "reason": "Agent workflow failed, so backup retrieval was selected."
+                },
+                "retrieval": {
+                    "queries_used": [strategic_question],
+                    "retrieval_count": len(evidence_items),
+                    "evidence": evidence_items
+                },
+                "analysis": {
+                    "risk_count": 0,
+                    "opportunity_count": 0,
+                    "competitor_count": 0,
+                    "market_count": 0,
+                    "dashboard_risk_signals": 0,
+                    "dashboard_opportunity_signals": 0,
+                    "analysis_summary": {
+                        "dominant_signal": "Fallback mode"
+                    }
+                },
                 "validation": {
                     "validation_status": "Fallback",
                     "confidence": confidence,
+                    "evidence_count": len(evidence_items),
+                    "source_count": len(set(item.get("source", "") for item in evidence_items)),
+                    "company_count": len(set(get_company_name(item) for item in evidence_items)),
+                    "is_ready_for_recommendation": False,
                     "warnings": [str(agent_error)]
                 },
                 "memory_context": "Agent memory unavailable because agent workflow failed."
@@ -379,6 +479,32 @@ Agent error:
 Additional instruction:
 Use the agent plan, selected tools, analysis, validation result, and memory context when forming the recommendation.
 If validation status is weak or warnings exist, mention the limitation clearly.
+
+Write the final CEO briefing in these sections:
+
+## 1. Executive diagnosis
+2-3 sentences only.
+
+## 2. Recommended CEO decision
+Give one clear decision.
+
+## 3. 90-day execution plan
+Use exactly three bullets:
+- First 30 days:
+- Days 31-60:
+- Days 61-90:
+
+## 4. Owners and KPIs
+Mention owners and 3 measurable KPIs.
+
+## 5. Main risks and mitigations
+Mention 2-3 risks with mitigation.
+
+## 6. Evidence used
+Mention 3-5 evidence titles or source names.
+
+Keep the answer concise and finish with the Evidence used section.
+Do not add extra commentary after the evidence section.
 """
 
         try:
@@ -402,10 +528,7 @@ If validation status is weak or warnings exist, mention the limitation clearly.
             llm_status = "LLM generation successful with agent workflow"
 
             # Store final generated answer in memory
-            try:
-                self.agent.memory_agent.update_latest_answer(answer)
-            except Exception:
-                pass
+            self.update_latest_answer_safely(answer)
 
         except Exception as error:
             answer = build_fallback_playbook(
@@ -418,10 +541,43 @@ If validation status is weak or warnings exist, mention the limitation clearly.
             llm_status = f"Fallback used because LLM failed: {error}"
 
             # Store fallback answer in memory too
-            try:
-                self.agent.memory_agent.update_latest_answer(answer)
-            except Exception:
-                pass
+            self.update_latest_answer_safely(answer)
+
+        # Keep agent result synchronized with the cleaned evidence used in the final answer.
+        agent_result["evidence"] = evidence_items
+        agent_result["confidence"] = confidence
+
+        if "workflow" not in agent_result:
+            agent_result["workflow"] = [
+                "Goal received",
+                "Plan created",
+                "Tools selected autonomously",
+                "Evidence retrieved",
+                "Analysis completed",
+                "Validation completed",
+                "Recommendation generated"
+            ]
+
+        if "retrieval" not in agent_result:
+            agent_result["retrieval"] = {
+                "queries_used": [strategic_question],
+                "retrieval_count": len(evidence_items),
+                "evidence": evidence_items
+            }
+        else:
+            agent_result["retrieval"]["evidence"] = evidence_items
+            agent_result["retrieval"]["retrieval_count"] = len(evidence_items)
+
+            if "queries_used" not in agent_result["retrieval"]:
+                agent_result["retrieval"]["queries_used"] = [strategic_question]
+
+        agent_decision = agent_result.get("decision")
+
+        if not agent_decision:
+            agent_decision = self.build_agent_decision(agent_result)
+            agent_result["decision"] = agent_decision
+
+        validation = agent_result.get("validation", {})
 
         return {
             "company": self.company_name,
@@ -431,13 +587,19 @@ If validation status is weak or warnings exist, mention the limitation clearly.
             "evidence": evidence_items,
             "llm_status": llm_status,
 
-            # Agent fields for dashboard/exam explanation
+            # Full agent object for dashboard workflow trace
+            "agent_result": agent_result,
+            "validation": validation,
+            "agent_decision": agent_decision,
+
+            # Backward-compatible fields already used by your current code
             "agent_plan": agent_result.get("plan", {}),
             "agent_tools": agent_result.get("tool_decision", {}),
             "agent_analysis": agent_result.get("analysis", {}),
-            "agent_validation": agent_result.get("validation", {}),
-            "agent_memory": self.agent.memory_agent.get_recent_memory(),
-            "agent_memory_context": self.agent.memory_agent.build_memory_context()
+            "agent_validation": validation,
+            "agent_memory": self.get_memory_safely(),
+            "agent_memory_context": self.get_memory_context_safely(),
+            "agent_workflow": agent_result.get("workflow", [])
         }
 
     def answer_followup(self, user_question, previous_briefing="", top_k=3, mode="chat"):
@@ -461,7 +623,7 @@ If validation status is weak or warnings exist, mention the limitation clearly.
             max_items=top_k
         )
 
-        memory_context = self.agent.memory_agent.build_memory_context()
+        memory_context = self.get_memory_context_safely()
 
         user_prompt = build_chat_prompt(
             company_name=self.company_name,
@@ -499,7 +661,7 @@ If validation status is weak or warnings exist, mention the limitation clearly.
             "answer": answer,
             "evidence": evidence_items,
             "llm_status": llm_status,
-            "agent_memory": self.agent.memory_agent.get_recent_memory()
+            "agent_memory": self.get_memory_safely()
         }
 
 
@@ -535,6 +697,14 @@ if __name__ == "__main__":
     print("\nAGENT VALIDATION")
     print("=" * 120)
     print(result["agent_validation"])
+
+    print("\nAGENT DECISION")
+    print("=" * 120)
+    print(result["agent_decision"])
+
+    print("\nAGENT WORKFLOW")
+    print("=" * 120)
+    print(result["agent_workflow"])
 
     print("\nAGENT MEMORY")
     print("=" * 120)

@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 from agents.planner_agent import PlannerAgent
@@ -12,28 +13,6 @@ SENTIMENT_RESULTS_PATH = Path("data/sentiment_results.json")
 
 
 class StrategicAgent:
-    """
-    Strategic Agent / Orchestrator
-
-    This class demonstrates the required agentic workflow:
-
-    Goal
-      ↓
-    Plan
-      ↓
-    Autonomous Tool Selection
-      ↓
-    Evidence Retrieval
-      ↓
-    Strategic Analysis
-      ↓
-    Decision
-      ↓
-    Validation
-      ↓
-    Memory Update
-    """
-
     def __init__(self):
         self.planner = PlannerAgent()
         self.tool_agent = ToolAgent()
@@ -51,35 +30,108 @@ class StrategicAgent:
         except Exception:
             return []
 
+    def normalize_key(self, value):
+        if not value:
+            return ""
+        return " ".join(str(value).lower().strip().split())
+
+    def build_sentiment_lookup(self, sentiment_data):
+        lookup = {}
+
+        for row in sentiment_data:
+            url_key = self.normalize_key(row.get("url", ""))
+            title_key = self.normalize_key(row.get("title", ""))
+
+            if url_key:
+                lookup[("url", url_key)] = row
+
+            if title_key:
+                lookup[("title", title_key)] = row
+
+        return lookup
+
+    def find_sentiment_match(self, item, sentiment_lookup):
+        url_key = self.normalize_key(item.get("url", ""))
+        title_key = self.normalize_key(item.get("title", ""))
+
+        if url_key and ("url", url_key) in sentiment_lookup:
+            return sentiment_lookup[("url", url_key)]
+
+        if title_key and ("title", title_key) in sentiment_lookup:
+            return sentiment_lookup[("title", title_key)]
+
+        return None
+
+    def build_signal_item(self, item):
+        return {
+            "title": item.get("title", "Unknown title"),
+            "source": item.get("source", "Unknown source"),
+            "source_type": item.get("source_type", "unknown"),
+            "company": item.get("company", item.get("competitor", "Unknown")),
+            "competitor": item.get("competitor", ""),
+            "topic": item.get("agent_topic", "Unknown"),
+            "sentiment": item.get("agent_sentiment", "Unknown"),
+            "strategic_signal": item.get("agent_strategic_signal", "Unknown"),
+            "url": item.get("url", ""),
+            "evidence_preview": item.get("evidence", item.get("chunk_text", ""))[:250]
+        }
+
+    def extract_keywords_from_goal(self, goal):
+        stop_words = {
+            "what", "how", "why", "should", "could", "would", "the", "a", "an",
+            "and", "or", "to", "in", "of", "for", "with", "on", "is", "are",
+            "be", "by", "from", "as", "at", "this", "that", "which"
+        }
+
+        words = re.findall(r"[a-zA-Z][a-zA-Z0-9\-]+", goal.lower())
+
+        keywords = [
+            word for word in words
+            if word not in stop_words and len(word) > 2
+        ]
+
+        return list(dict.fromkeys(keywords))
+
     def build_retrieval_queries(self, goal, selected_tools):
+        keywords = self.extract_keywords_from_goal(goal)
+        keyword_text = " ".join(keywords)
+
         queries = [goal]
 
-        if "competitor_intelligence" in selected_tools:
-            queries.extend([
-                f"{goal} AWS Google Cloud OpenAI NVIDIA competitor strategy",
-                "Microsoft competitors AI cloud infrastructure AWS Google Cloud OpenAI NVIDIA"
-            ])
+        tool_query_templates = {
+            "competitor_intelligence": [
+                f"{goal} competitor strategy competitive positioning",
+                f"{keyword_text} competition market positioning"
+            ],
+            "risk_analysis": [
+                f"{goal} risks threats governance compliance security",
+                f"{keyword_text} risk governance compliance"
+            ],
+            "opportunity_analysis": [
+                f"{goal} opportunities growth investment adoption",
+                f"{keyword_text} opportunity growth adoption"
+            ],
+            "market_intelligence": [
+                f"{goal} market trends industry adoption demand",
+                f"{keyword_text} market trends industry"
+            ],
+            "hybrid_retrieval": [
+                f"{goal} evidence strategic intelligence"
+            ]
+        }
 
-        if "risk_analysis" in selected_tools:
-            queries.extend([
-                f"{goal} risk security governance compliance threat",
-                "Microsoft AI security risk governance compliance cloud"
-            ])
+        for tool in selected_tools:
+            queries.extend(tool_query_templates.get(tool, []))
 
-        if "opportunity_analysis" in selected_tools:
-            queries.extend([
-                f"{goal} opportunity growth investment Azure Copilot Foundry",
-                "Microsoft Azure AI Foundry Copilot enterprise opportunity"
-            ])
+        clean_queries = []
 
-        if "market_intelligence" in selected_tools:
-            queries.extend([
-                f"{goal} market trends enterprise AI cloud",
-                "AI cloud market trends enterprise adoption Microsoft competitors"
-            ])
+        for query in queries:
+            query = " ".join(query.split())
 
-        # Remove duplicates while preserving order
-        return list(dict.fromkeys(queries))
+            if query and query not in clean_queries:
+                clean_queries.append(query)
+
+        return clean_queries
 
     def retrieve_evidence(self, goal, selected_tools, top_k=5):
         queries = self.build_retrieval_queries(
@@ -123,14 +175,88 @@ class StrategicAgent:
 
     def analyze_with_existing_tools(self, goal, evidence_items, selected_tools):
         sentiment_data = self.load_sentiment_results()
+        sentiment_lookup = self.build_sentiment_lookup(sentiment_data)
 
         risk_count = 0
         opportunity_count = 0
+        neutral_count = 0
+        irrelevant_count = 0
+        matched_sentiment_items = 0
         competitor_count = 0
         market_count = 0
 
+        risk_items = []
+        opportunity_items = []
+        competitor_items = []
+        market_items = []
+
+        topics = {}
+        sentiments = {}
+        analyzed_evidence = []
+
         for item in evidence_items:
-            text = " ".join([
+            matched_row = self.find_sentiment_match(item, sentiment_lookup)
+
+            if matched_row:
+                matched_sentiment_items += 1
+
+                strategic_signal = matched_row.get("strategic_signal", "Neutral")
+                sentiment = matched_row.get("sentiment", "Unknown")
+                topic = matched_row.get("topic", "Unknown")
+
+                item["agent_strategic_signal"] = strategic_signal
+                item["agent_sentiment"] = sentiment
+                item["agent_topic"] = topic
+                item["analysis_source"] = "sentiment_results.json"
+
+                if strategic_signal == "Risk":
+                    risk_count += 1
+                    risk_items.append(self.build_signal_item(item))
+                elif strategic_signal == "Opportunity":
+                    opportunity_count += 1
+                    opportunity_items.append(self.build_signal_item(item))
+                elif strategic_signal == "Irrelevant":
+                    irrelevant_count += 1
+                else:
+                    neutral_count += 1
+
+                topics[topic] = topics.get(topic, 0) + 1
+                sentiments[sentiment] = sentiments.get(sentiment, 0) + 1
+
+            else:
+                text = " ".join([
+                    str(item.get("title", "")),
+                    str(item.get("source", "")),
+                    str(item.get("evidence", "")),
+                    str(item.get("chunk_text", "")),
+                    str(item.get("text", ""))
+                ]).lower()
+
+                item["analysis_source"] = "fallback_keyword_scan"
+                item["agent_sentiment"] = "Unknown"
+                item["agent_topic"] = "Unknown"
+
+                if any(word in text for word in [
+                    "risk", "security", "threat", "governance",
+                    "compliance", "vulnerability"
+                ]):
+                    risk_count += 1
+                    item["agent_strategic_signal"] = "Risk"
+                    risk_items.append(self.build_signal_item(item))
+
+                elif any(word in text for word in [
+                    "opportunity", "growth", "adoption",
+                    "enterprise", "investment", "scale"
+                ]):
+                    opportunity_count += 1
+                    item["agent_strategic_signal"] = "Opportunity"
+                    opportunity_items.append(self.build_signal_item(item))
+
+                else:
+                    neutral_count += 1
+                    item["agent_strategic_signal"] = "Neutral"
+
+            text_for_context = " ".join([
                 str(item.get("title", "")),
                 str(item.get("source", "")),
                 str(item.get("evidence", "")),
@@ -138,57 +264,42 @@ class StrategicAgent:
                 str(item.get("text", ""))
             ]).lower()
 
-            if any(word in text for word in [
-                "risk",
-                "security",
-                "threat",
-                "governance",
-                "compliance",
-                "vulnerability"
-            ]):
-                risk_count += 1
+            company = str(item.get("company", "")).lower()
+            competitor = str(item.get("competitor", "")).lower()
+            source_type = str(item.get("source_type", "")).lower()
 
-            if any(word in text for word in [
-                "opportunity",
-                "growth",
-                "azure",
-                "copilot",
-                "foundry",
-                "enterprise",
-                "investment"
-            ]):
-                opportunity_count += 1
+            is_competitor_item = (
+                competitor
+                or source_type == "competitor"
+                or (company and company != "microsoft")
+                or any(word in text_for_context for word in [
+                    "competitor", "competition", "rival", "compete", "competitive"
+                ])
+            )
 
-            if any(word in text for word in [
-                "aws",
-                "google",
-                "openai",
-                "nvidia",
-                "anthropic",
-                "competitor"
-            ]):
+            if is_competitor_item:
                 competitor_count += 1
+                competitor_items.append(self.build_signal_item(item))
 
-            if any(word in text for word in [
-                "market",
-                "trend",
-                "industry",
-                "adoption",
-                "demand"
-            ]):
+            is_market_item = any(word in text_for_context for word in [
+                "market", "trend", "industry", "adoption", "demand"
+            ])
+
+            if is_market_item:
                 market_count += 1
+                market_items.append(self.build_signal_item(item))
 
-        dashboard_risks = 0
-        dashboard_opportunities = 0
+            analyzed_evidence.append(item)
 
-        for row in sentiment_data:
-            signal = row.get("strategic_signal", "")
+        dashboard_risks = sum(
+            1 for row in sentiment_data
+            if row.get("strategic_signal") == "Risk"
+        )
 
-            if signal == "Risk":
-                dashboard_risks += 1
-
-            if signal == "Opportunity":
-                dashboard_opportunities += 1
+        dashboard_opportunities = sum(
+            1 for row in sentiment_data
+            if row.get("strategic_signal") == "Opportunity"
+        )
 
         if risk_count > opportunity_count:
             dominant_signal = "Risk-focused"
@@ -202,14 +313,29 @@ class StrategicAgent:
             "selected_tools_used": selected_tools,
             "risk_count": risk_count,
             "opportunity_count": opportunity_count,
+            "neutral_count": neutral_count,
+            "irrelevant_count": irrelevant_count,
             "competitor_count": competitor_count,
             "market_count": market_count,
+            "risk_items": risk_items,
+            "opportunity_items": opportunity_items,
+            "competitor_items": competitor_items,
+            "market_items": market_items,
+            "matched_sentiment_items": matched_sentiment_items,
+            "total_evidence_items": len(evidence_items),
+            "topics_in_retrieved_evidence": topics,
+            "sentiments_in_retrieved_evidence": sentiments,
             "dashboard_risk_signals": dashboard_risks,
             "dashboard_opportunity_signals": dashboard_opportunities,
+            "analyzed_evidence": analyzed_evidence,
             "analysis_summary": {
                 "dominant_signal": dominant_signal,
                 "has_competitor_context": competitor_count > 0,
-                "has_market_context": market_count > 0
+                "has_market_context": market_count > 0,
+                "analysis_method": (
+                    "Matched retrieved evidence with sentiment_results.json; "
+                    "fallback keyword scan used only when no match was found."
+                )
             }
         }
 
@@ -222,13 +348,15 @@ class StrategicAgent:
         if ready:
             decision_status = "Recommendation approved for presentation"
         else:
-            decision_status = "Recommendation requires caution because validation confidence is weak"
+            decision_status = (
+                "Recommendation requires caution because validation confidence is weak"
+            )
 
         return {
             "selected_tools": selected_tools,
             "tool_selection_reason": tool_decision.get(
-                "reason",
-                "Tools selected based on agent planning."
+                "decision_reasoning",
+                ["Tools selected based on agent planning."]
             ),
             "validation_status": validation.get("validation_status", "Unknown"),
             "confidence": confidence,
@@ -238,20 +366,11 @@ class StrategicAgent:
         }
 
     def execute(self, user_goal, top_k=5):
-        """
-        Main agent workflow.
-
-        This method is called by StrategicAnalyzer.
-        """
-
-        # Step 1: Planning
         plan = self.planner.create_plan(user_goal)
 
-        # Step 2: Autonomous tool selection
         tool_decision = self.tool_agent.select_tools(plan)
         selected_tools = tool_decision.get("selected_tools", [])
 
-        # Step 3: Evidence retrieval
         retrieved_data = self.retrieve_evidence(
             goal=user_goal,
             selected_tools=selected_tools,
@@ -260,14 +379,12 @@ class StrategicAgent:
 
         evidence_items = retrieved_data.get("evidence", [])
 
-        # Step 4: Strategic analysis
         analysis = self.analyze_with_existing_tools(
             goal=user_goal,
             evidence_items=evidence_items,
             selected_tools=selected_tools
         )
 
-        # Step 5: Validation before recommendation
         validation = self.validation_agent.validate(
             goal=user_goal,
             plan=plan,
@@ -276,13 +393,11 @@ class StrategicAgent:
             analysis_result=analysis
         )
 
-        # Step 6: Agent decision
         decision = self.build_decision(
             tool_decision=tool_decision,
             validation=validation
         )
 
-        # Step 7: Store memory
         memory = self.memory_agent.save_interaction(
             user_goal=user_goal,
             plan=plan,
@@ -298,8 +413,10 @@ class StrategicAgent:
                 "Goal received",
                 "Plan created by PlannerAgent",
                 "Tools selected autonomously by ToolAgent",
+                "Dynamic retrieval queries created",
                 "Evidence retrieved using HybridRetriever",
-                "Risks, opportunities, competitors, and market signals analyzed",
+                "Retrieved evidence matched with sentiment_results.json where possible",
+                "Risks, opportunities, topics, and sentiments analyzed",
                 "Recommendation validated by ValidationAgent",
                 "Agent decision created",
                 "Interaction stored in MemoryAgent"

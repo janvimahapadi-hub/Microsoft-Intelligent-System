@@ -39,27 +39,31 @@ def get_company(row):
         return "OpenAI"
     if "nvidia" in source_lower:
         return "NVIDIA"
+    if "anthropic" in source_lower:
+        return "Anthropic"
 
     return "Microsoft"
 
 
 def show_overview():
     st.title("Project Overview")
+
     st.caption(
-        "AI-powered Strategic Intelligence Platform for executive decision support."
+        "AI CEO Strategic Intelligence Agent with RAG, hybrid retrieval, sentiment analysis, "
+        "competitor intelligence, validation, memory, and local LLM reasoning."
     )
 
     st.subheader("Problem Statement")
 
     st.write(
-        "Technology leaders receive hundreds of updates from AI announcements, cloud releases, "
-        "security reports, developer communities, market signals, partner ecosystems, and competitor activity. "
-        "Manually analyzing all this information is slow, repetitive, and can cause important opportunities or risks to be missed."
+        "Technology leaders receive large volumes of updates from AI announcements, cloud releases, "
+        "security reports, developer communities, partner ecosystems, and competitor activity. "
+        "Manually analyzing this information is slow and can cause important opportunities or risks to be missed."
     )
 
     st.write(
-        "This project transforms large volumes of unstructured text into executive-level intelligence "
-        "that supports faster, evidence-based strategic decision-making."
+        "This project converts unstructured strategic information into evidence-based executive intelligence "
+        "for CEO-level decision support."
     )
 
     st.divider()
@@ -68,16 +72,18 @@ def show_overview():
 
     st.markdown(
         """
-Build an AI-powered Strategic Intelligence Platform that can:
+Build an AI-powered Strategic Intelligence Agent that can:
 
-- Collect information from Microsoft and competitor sources
-- Clean and prepare unstructured text data
-- Identify opportunities and risks
-- Measure sentiment and market signals
-- Compare Microsoft with AWS, Google Cloud, OpenAI, and NVIDIA
-- Retrieve relevant evidence for strategic questions
-- Generate CEO-level briefings using a local LLM
-- Produce actionable recommendations with KPIs and risks
+- Collect Microsoft and competitor intelligence
+- Clean and prepare unstructured text
+- Classify sentiment, risks, opportunities, and topics
+- Retrieve relevant evidence using FAISS + BM25 hybrid retrieval
+- Plan before execution using a Planner Agent
+- Select tools autonomously using a Tool Agent
+- Analyze risks, opportunities, competitors, and market signals
+- Validate recommendations before presentation
+- Store short-term memory for follow-up questions
+- Generate CEO-level briefings using a local LLM through Ollama
 """
     )
 
@@ -137,7 +143,7 @@ Build an AI-powered Strategic Intelligence Platform that can:
 
     st.divider()
 
-    st.subheader("System Workflow")
+    st.subheader("System Architecture")
 
     st.graphviz_chart(
         """
@@ -148,20 +154,103 @@ Build an AI-powered Strategic Intelligence Platform that can:
             A [label="Data Collection"];
             B [label="Cleaning"];
             C [label="Chunking"];
-            D [label="Hybrid Retrieval"];
-            E [label="Local LLM Reasoning"];
-            F [label="CEO Briefing"];
-            G [label="Sentiment & Signals"];
-            H [label="Competitor Intelligence"];
-            I [label="Recommendations"];
+            D [label="Embedding Model\\nall-MiniLM-L6-v2"];
+            E [label="FAISS Vector Store"];
+            F [label="BM25 Keyword Index"];
+            G [label="Hybrid Retriever"];
+            H [label="Sentiment + Strategic Signals"];
+            I [label="Dashboards"];
 
-            A -> B -> C -> D -> E -> F;
-            B -> G -> I;
-            G -> H;
-            D -> I;
+            A -> B -> C;
+            C -> D -> E;
+            C -> F;
+            E -> G;
+            F -> G;
+            B -> H;
             H -> I;
         }
         """
+    )
+
+    st.divider()
+
+    st.subheader("Agentic CEO Briefing Workflow")
+
+    st.graphviz_chart(
+        """
+        digraph {
+            rankdir=LR;
+            node [shape=box, style="rounded,filled", color="#16a34a", fillcolor="#ecfdf5", fontname="Arial"];
+
+            Goal [label="User Goal"];
+            Plan [label="Planner Agent\\nCreates Plan"];
+            Tool [label="Tool Agent\\nSelects Tools"];
+            Query [label="Dynamic Query Expansion"];
+            Retrieve [label="Hybrid Retrieval\\nFAISS + BM25"];
+            Analyze [label="Strategic Analysis\\nRisk / Opportunity / Market / Competitor"];
+            Validate [label="Validation Agent\\nConfidence + Warnings"];
+            Decide [label="Agent Decision"];
+            Memory [label="Memory Agent\\nSession Memory"];
+            Prompt [label="Prompt Builder"];
+            LLM [label="Ollama Local LLM\\nQwen / Llama"];
+            Briefing [label="CEO Briefing"];
+
+            Goal -> Plan -> Tool -> Query -> Retrieve -> Analyze -> Validate -> Decide -> Memory -> Prompt -> LLM -> Briefing;
+        }
+        """
+    )
+
+    st.info(
+        "This workflow demonstrates explicit agent behaviour: planning before execution, "
+        "autonomous tool selection, evidence retrieval, analysis, validation, decision-making, "
+        "memory, and final recommendation generation."
+    )
+
+    st.divider()
+
+    st.subheader("How This Differs from Simple RAG")
+
+    st.markdown(
+        """
+A simple RAG system usually follows:
+
+`User Question → Retrieve Evidence → Prompt → LLM → Answer`
+
+This project extends that into an agent workflow:
+
+`Goal → Plan → Select Tools → Retrieve → Analyze → Validate → Decide → Recommend → Memory`
+
+The LLM is not doing all the work. It only generates the final briefing after the agent has planned, retrieved, analyzed, validated, and prepared grounded context.
+"""
+    )
+
+    st.divider()
+
+    st.subheader("Main Components")
+
+    st.markdown(
+        """
+### Planner Agent
+Creates an execution plan based on the user's strategic question.
+
+### Tool Agent
+Selects tools such as hybrid retrieval, risk analysis, opportunity analysis, market intelligence, or competitor intelligence.
+
+### Hybrid Retriever
+Uses both FAISS semantic search and BM25 keyword search to retrieve evidence.
+
+### Strategic Analysis
+Matches retrieved evidence with `sentiment_results.json` and identifies risks, opportunities, topics, sentiments, competitor signals, and market signals.
+
+### Validation Agent
+Checks evidence count, source diversity, company diversity, URLs, confidence, and readiness.
+
+### Memory Agent
+Stores the recent interaction during the session so follow-up questions can use previous context.
+
+### Ollama Local LLM
+Generates the final CEO briefing using only retrieved evidence and agent analysis.
+"""
     )
 
     st.divider()
@@ -174,7 +263,7 @@ Build an AI-powered Strategic Intelligence Platform that can:
         st.markdown(
             """
 ### 🧠 CEO Briefing
-Ask strategic questions and generate evidence-based executive briefings with actions, risks, KPIs, and evidence.
+Generates evidence-based strategic briefings with planning, tool selection, validation, risks, KPIs, and evidence.
 """
         )
 
@@ -211,7 +300,7 @@ Compares Microsoft-related intelligence with AWS, Google Cloud, OpenAI, NVIDIA, 
         st.markdown(
             """
 ### ✅ Recommendations
-Converts evidence, sentiment, opportunities, risks, and competitor activity into executive-level recommendations.
+Converts evidence, sentiment, opportunities, risks, competitor activity, and validation results into executive-level recommendations.
 """
         )
 
@@ -229,8 +318,9 @@ This system helps leadership teams by providing:
 - Opportunity identification
 - Competitor comparison
 - Evidence-backed recommendations
-- Continuous strategic monitoring
-- Clear next-step actions for leadership
+- Transparent agent workflow
+- Validation before recommendation
+- Follow-up Q&A with session memory
 """
     )
 
@@ -242,9 +332,11 @@ This system helps leadership teams by providing:
         """
 Future improvements can include:
 
+- Persistent memory using SQLite
 - More competitor sources from Anthropic, Meta, IBM, Oracle, and Salesforce
-- Real-time news and RSS monitoring
-- Hybrid retrieval tuning with source weighting
+- Real-time RSS monitoring
+- LangChain or LangGraph integration
+- Better query expansion and retrieval tuning
 - Multi-company benchmarking
 - Trend forecasting over time
 - PDF export for executive reports

@@ -83,14 +83,8 @@ def is_bad_evidence(item):
 
     return False
 
+
 def is_incomplete_answer(answer):
-    """
-    Practical completeness check for local Ollama models.
-
-    We do not require an exact END marker because small local models may skip it.
-    Instead, we check whether the answer contains enough CEO briefing structure.
-    """
-
     if not answer or len(answer.strip()) < 350:
         return True
 
@@ -112,14 +106,13 @@ def is_incomplete_answer(answer):
         if section in answer_lower:
             found_sections += 1
 
-    # Evidence section is important because it usually appears near the end.
     has_evidence_section = "evidence used" in answer_lower
 
-    # Accept if it has evidence and most required sections.
     if has_evidence_section and found_sections >= 5:
         return False
 
     return True
+
 
 def build_fallback_playbook(company_name, strategic_question, evidence_items, error_message):
     evidence_titles = []
@@ -236,18 +229,10 @@ Fallback reason: {error_message}
 class StrategicAnalyzer:
     def __init__(self, company_name="Microsoft"):
         self.company_name = company_name
-
-        # Backup/simple retrieval
         self.retriever = HybridRetriever()
-
-        # Agentic workflow layer
         self.agent = StrategicAgent()
 
     def retrieve_strategic_evidence(self, strategic_question, top_k=5):
-        """
-        Backup retrieval if the agent workflow fails.
-        """
-
         raw_results = self.retriever.search(
             strategic_question,
             top_k=top_k * 3
@@ -308,11 +293,6 @@ Memory:
 """
 
     def build_agent_decision(self, agent_result):
-        """
-        Converts validation + tool decision into a clear decision object
-        for dashboard display and examiner explanation.
-        """
-
         validation = agent_result.get("validation", {})
         tool_decision = agent_result.get("tool_decision", {})
 
@@ -330,8 +310,8 @@ Memory:
         return {
             "selected_tools": selected_tools,
             "tool_selection_reason": tool_decision.get(
-                "reason",
-                "No tool selection reason available."
+                "decision_reasoning",
+                ["No tool selection reason available."]
             ),
             "validation_status": validation_status,
             "confidence": confidence,
@@ -359,26 +339,6 @@ Memory:
             pass
 
     def analyze(self, strategic_question, top_k=5, mode="fast"):
-        """
-        Main agentic workflow:
-
-        Goal
-          ↓
-        Plan
-          ↓
-        Tool Selection
-          ↓
-        Retrieve
-          ↓
-        Analyze
-          ↓
-        Validate
-          ↓
-        Recommend
-          ↓
-        Store Memory
-        """
-
         try:
             agent_result = self.agent.execute(
                 user_goal=strategic_question,
@@ -427,7 +387,9 @@ Memory:
                 },
                 "tool_decision": {
                     "selected_tools": ["backup_hybrid_retrieval"],
-                    "reason": "Agent workflow failed, so backup retrieval was selected."
+                    "decision_reasoning": [
+                        "Agent workflow failed, so backup retrieval was selected."
+                    ]
                 },
                 "retrieval": {
                     "queries_used": [strategic_question],
@@ -468,7 +430,10 @@ Agent error:
         user_prompt = build_ceo_prompt(
             company_name=self.company_name,
             strategic_question=strategic_question,
-            evidence_items=evidence_items
+            evidence_items=evidence_items,
+            agent_analysis=agent_result.get("analysis", {}),
+            agent_validation=agent_result.get("validation", {}),
+            agent_decision=agent_result.get("decision", {})
         )
 
         user_prompt = f"""
@@ -526,8 +491,6 @@ Do not add extra commentary after the evidence section.
                 )
 
             llm_status = "LLM generation successful with agent workflow"
-
-            # Store final generated answer in memory
             self.update_latest_answer_safely(answer)
 
         except Exception as error:
@@ -539,11 +502,8 @@ Do not add extra commentary after the evidence section.
             )
 
             llm_status = f"Fallback used because LLM failed: {error}"
-
-            # Store fallback answer in memory too
             self.update_latest_answer_safely(answer)
 
-        # Keep agent result synchronized with the cleaned evidence used in the final answer.
         agent_result["evidence"] = evidence_items
         agent_result["confidence"] = confidence
 
@@ -587,12 +547,10 @@ Do not add extra commentary after the evidence section.
             "evidence": evidence_items,
             "llm_status": llm_status,
 
-            # Full agent object for dashboard workflow trace
             "agent_result": agent_result,
             "validation": validation,
             "agent_decision": agent_decision,
 
-            # Backward-compatible fields already used by your current code
             "agent_plan": agent_result.get("plan", {}),
             "agent_tools": agent_result.get("tool_decision", {}),
             "agent_analysis": agent_result.get("analysis", {}),

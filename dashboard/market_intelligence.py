@@ -33,6 +33,8 @@ def get_company(row):
         return "OpenAI"
     if "nvidia" in source_lower:
         return "NVIDIA"
+    if "anthropic" in source_lower:
+        return "Anthropic"
 
     return "Microsoft"
 
@@ -53,6 +55,110 @@ def prepare_dates(df):
     df["month"] = df["month"].replace("NaT", "Unknown")
 
     return df
+
+
+def show_latest_news(df):
+    st.subheader("Recent News")
+
+    latest = (
+        df.sort_values("published_date", ascending=False)
+        .head(5)
+    )
+
+    for _, row in latest.iterrows():
+        st.markdown(f"**{row.get('title', 'Untitled')}**")
+        st.caption(
+            f"{row.get('source', 'Unknown source')} | "
+            f"{row.get('published', 'unknown')} | "
+            f"{row.get('topic', 'Unknown topic')}"
+        )
+
+
+def show_competitor_activities(df):
+    st.subheader("Competitor Activities")
+
+    competitors = df[df["company_view"] != "Microsoft"].head(8)
+
+    if competitors.empty:
+        st.info("No competitor activities found.")
+        return
+
+    for _, row in competitors.iterrows():
+        st.markdown(
+            f"**{row.get('company_view', 'Unknown')}** — "
+            f"{row.get('title', 'Untitled')}"
+        )
+        st.caption(
+            f"{row.get('source', 'Unknown source')} | "
+            f"{row.get('topic', 'Unknown topic')} | "
+            f"{row.get('strategic_signal', 'Unknown signal')}"
+        )
+
+
+def show_emerging_technologies(df):
+    st.subheader("Emerging Technologies")
+
+    tech_keywords = [
+        "AI",
+        "Copilot",
+        "Azure",
+        "Agent",
+        "Foundry",
+        "LLM",
+        "Cloud",
+        "Security",
+        "Developer",
+        "Infrastructure",
+        "Model",
+        "Automation",
+        "Data",
+        "Governance"
+    ]
+
+    text_series = (
+        df.get("title", pd.Series(dtype=str)).fillna("").astype(str)
+        + " "
+        + df.get("evidence", pd.Series(dtype=str)).fillna("").astype(str)
+    )
+
+    found = []
+
+    for keyword in tech_keywords:
+        count = text_series.str.contains(keyword, case=False, regex=False).sum()
+
+        if count > 0:
+            found.append((keyword, int(count)))
+
+    if found:
+        tech_df = pd.DataFrame(found, columns=["Technology", "Mentions"])
+        tech_df = tech_df.sort_values("Mentions", ascending=False)
+        st.bar_chart(tech_df.set_index("Technology"))
+        st.dataframe(tech_df, use_container_width=True)
+    else:
+        st.info("No emerging technology signals found.")
+
+
+def show_company_announcements(df):
+    st.subheader("Important Company Announcements")
+
+    announcements = (
+        df[df["company_view"] == "Microsoft"]
+        .sort_values("published_date", ascending=False)
+        .head(5)
+    )
+
+    if announcements.empty:
+        st.info("No Microsoft announcements found.")
+        return
+
+    for _, row in announcements.iterrows():
+        st.markdown(f"**{row.get('title', 'Untitled')}**")
+        st.caption(
+            f"{row.get('source', 'Unknown source')} | "
+            f"{row.get('published', 'unknown')} | "
+            f"{row.get('topic', 'Unknown topic')} | "
+            f"{row.get('strategic_signal', 'Unknown signal')}"
+        )
 
 
 def show_market_intelligence():
@@ -204,3 +310,19 @@ def show_market_intelligence():
 - **Topic concentration** shows where the collected intelligence is strongest.
 """
         )
+
+    st.divider()
+
+    show_latest_news(clean_df)
+
+    st.divider()
+
+    show_competitor_activities(clean_df)
+
+    st.divider()
+
+    show_emerging_technologies(clean_df)
+
+    st.divider()
+
+    show_company_announcements(clean_df)

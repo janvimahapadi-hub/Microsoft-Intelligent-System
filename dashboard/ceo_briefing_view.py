@@ -26,16 +26,12 @@ def get_company(item):
 
     if "aws" in source_lower:
         return "AWS"
-
     if "google" in source_lower:
         return "Google Cloud"
-
     if "openai" in source_lower:
         return "OpenAI"
-
     if "nvidia" in source_lower:
         return "NVIDIA"
-
     if "anthropic" in source_lower:
         return "Anthropic"
 
@@ -67,11 +63,6 @@ def clean_preview_text(text, preview_length=700):
 
 
 def show_readable_json(data, height=260):
-    """
-    Show dictionaries/lists in a clearly readable box.
-    This avoids Streamlit theme issues where JSON text becomes white on white.
-    """
-
     try:
         readable_text = json.dumps(
             data,
@@ -103,6 +94,37 @@ def show_readable_json(data, height=260):
         unsafe_allow_html=True
     )
 
+
+def show_signal_items(title, items):
+    st.markdown(f"#### {title}")
+
+    if not items:
+        st.info("No evidence items found for this signal.")
+        return
+
+    for index, item in enumerate(items, start=1):
+        item_title = item.get("title", "Unknown title")
+        source = item.get("source", "Unknown source")
+        company = item.get("company", "Unknown company")
+        topic = item.get("topic", "Unknown topic")
+        sentiment = item.get("sentiment", "Unknown sentiment")
+        url = item.get("url", "")
+        preview = item.get("evidence_preview", "")
+
+        with st.expander(f"{index}. {item_title}"):
+            st.write("**Company:**", company)
+            st.write("**Source:**", source)
+            st.write("**Topic:**", topic)
+            st.write("**Sentiment:**", sentiment)
+
+            if url:
+                st.markdown(f"**URL:** [{url}]({url})")
+
+            if preview:
+                st.write("**Evidence Preview:**")
+                st.write(clean_preview_text(preview, preview_length=300))
+
+
 def show_evidence_diversity(evidence_items):
     companies = [get_company(item) for item in evidence_items]
     unique_companies = sorted(set(companies))
@@ -129,7 +151,6 @@ def show_evidence_items(evidence_items, preview_length=700):
 
     for item in evidence_items:
         company = get_company(item)
-
         title = item.get("title", "Untitled evidence")
 
         with st.expander(title):
@@ -200,7 +221,6 @@ def show_validation_gate(agent_result):
 
     if warnings:
         st.write("**Validation Warnings:**")
-
         for warning in warnings:
             st.markdown(f"- {warning}")
     else:
@@ -222,7 +242,6 @@ def show_agent_workflow_trace(agent_result):
 
     if workflow:
         st.write("**Workflow executed:**")
-
         for step in workflow:
             st.markdown(f"- {step}")
 
@@ -251,6 +270,7 @@ def show_agent_workflow_trace(agent_result):
     with st.expander("3. Autonomous Tool Decision by ToolAgent", expanded=False):
         tool_decision = agent_result.get("tool_decision", {})
         selected_tools = tool_decision.get("selected_tools", [])
+        decision_reasoning = tool_decision.get("decision_reasoning", [])
 
         st.write("**Selected tools:**")
 
@@ -260,8 +280,13 @@ def show_agent_workflow_trace(agent_result):
         else:
             st.write("No tools selected.")
 
-        st.write("**Tool selection reason:**")
-        st.info(tool_decision.get("reason", "No reason available."))
+        st.write("**Tool selection reasoning:**")
+
+        if decision_reasoning:
+            for reason in decision_reasoning:
+                st.markdown(f"- {reason}")
+        else:
+            st.info(tool_decision.get("reason", "No reason available."))
 
         st.write("**Raw tool decision object:**")
         show_readable_json(tool_decision, height=220)
@@ -286,7 +311,7 @@ def show_agent_workflow_trace(agent_result):
         else:
             st.write("No retrieval queries available.")
 
-    with st.expander("5. Strategic Analysis", expanded=False):
+    with st.expander("5. Strategic Analysis", expanded=True):
         analysis = agent_result.get("analysis", {})
 
         col1, col2, col3, col4 = st.columns(4)
@@ -310,6 +335,28 @@ def show_agent_workflow_trace(agent_result):
             st.markdown(f"- **Has market context:** {'Yes' if market_context else 'No'}")
         else:
             st.write("No analysis summary available.")
+
+        st.divider()
+
+        show_signal_items(
+            "Risk Evidence Items",
+            analysis.get("risk_items", [])
+        )
+
+        show_signal_items(
+            "Opportunity Evidence Items",
+            analysis.get("opportunity_items", [])
+        )
+
+        show_signal_items(
+            "Competitor Evidence Items",
+            analysis.get("competitor_items", [])
+        )
+
+        show_signal_items(
+            "Market Evidence Items",
+            analysis.get("market_items", [])
+        )
 
         st.write("**Raw analysis object:**")
         show_readable_json(analysis, height=300)
@@ -342,6 +389,15 @@ def show_agent_workflow_trace(agent_result):
             for tool in decision.get("selected_tools", []):
                 st.markdown(f"- `{tool}`")
 
+            tool_reason = decision.get("tool_selection_reason", [])
+
+            st.write("**Tool selection reasons:**")
+            if isinstance(tool_reason, list):
+                for reason in tool_reason:
+                    st.markdown(f"- {reason}")
+            else:
+                st.write(tool_reason)
+
             warnings = decision.get("warnings", [])
 
             if warnings:
@@ -364,10 +420,6 @@ def show_agent_workflow_trace(agent_result):
 
 
 def normalize_agent_result(report):
-    """
-    Ensures agent_result contains validation and decision even if they are returned separately.
-    """
-
     agent_result = report.get("agent_result", {}) or {}
 
     validation = report.get("validation", {}) or {}
@@ -470,7 +522,6 @@ def show_ceo_briefing():
                 )
 
                 markdown_report = briefing_engine.generate_markdown_report(report)
-
                 agent_result = normalize_agent_result(report)
 
                 st.session_state["latest_report"] = report

@@ -1,8 +1,8 @@
 class ValidationAgent:
     """
     Validation Agent:
-    Validates whether the recommendation is supported by enough evidence.
-    This demonstrates recommendation validation before presenting the final answer.
+    Validates whether the recommendation is supported by enough evidence
+    and whether the question belongs to the Microsoft Strategic Intelligence domain.
     """
 
     def validate(self, goal, plan, tool_decision, retrieved_data, analysis_result):
@@ -38,7 +38,25 @@ class ValidationAgent:
 
         confidence = round(min(confidence, 1.0), 2)
 
+        goal_text = goal.lower()
+
+        domain_terms = [
+            "microsoft", "azure", "cloud", "ai", "copilot", "foundry",
+            "aws", "google", "openai", "nvidia", "security", "cybersecurity",
+            "market", "competitor", "risk", "opportunity", "strategy",
+            "enterprise", "agent", "llm", "infrastructure", "governance",
+            "compliance", "partner", "developer", "data"
+        ]
+
+        is_in_domain = any(term in goal_text for term in domain_terms)
+
         warnings = []
+
+        if not is_in_domain:
+            confidence = min(confidence, 0.35)
+            warnings.append(
+                "The question appears to be outside the Microsoft Strategic Intelligence domain."
+            )
 
         if evidence_count < 3:
             warnings.append("Low evidence count. Recommendation should be treated cautiously.")
@@ -70,5 +88,6 @@ class ValidationAgent:
             "company_count": len(companies),
             "url_count": len(urls),
             "warnings": warnings,
-            "is_ready_for_recommendation": confidence >= 0.50
+            "is_ready_for_recommendation": confidence >= 0.50,
+            "is_in_domain": is_in_domain
         }

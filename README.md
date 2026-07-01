@@ -203,12 +203,6 @@ This supports follow-up questions in the CEO Briefing page.
 
 ---
 
-# 📸 Dashboard Screenshots
-
-The AI CEO Strategic Intelligence Agent provides an interactive Streamlit dashboard for executive decision support.
-
----
-
 # 🚀 Key Features
 
 ## 1. Competitor Intelligence
